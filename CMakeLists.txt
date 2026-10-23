@@ -43,7 +43,7 @@ if(APPLE)
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}")
 endif()
 
-install(TARGETS KarabasFlasher RUNTIME DESTINATION bin)
+install(TARGETS KarabasFlasher RUNTIME DESTINATION bin BUNDLE DESTINATION .)
 
 # Linux: правило udev выдаёт доступ к порту Карабаса без группы dialout/uucp
 if(UNIX AND NOT APPLE)
