@@ -1,0 +1,827 @@
+#include "Worker.h"
+
+#include "Uf2.h"
+#include "Util.h"
+
+#include <QDateTime>
+#include <QDir>
+#include <QElapsedTimer>
+#include <QEventLoop>
+#include <QFile>
+#include <QFileInfo>
+#include <QHash>
+#include <QJsonArray>
+#include <QJsonDocument>
+#include <QJsonObject>
+#include <QNetworkAccessManager>
+#include <QNetworkReply>
+#include <QNetworkRequest>
+#include <QRegularExpression>
+#include <QSaveFile>
+#include <QSerialPort>
+#include <QSerialPortInfo>
+#include <QThread>
+#include <QTimer>
+
+#include <algorithm>
+#include <exception>
+#include <memory>
+
+namespace {
+const qint64 kMaxTextBytes = 4 * 1024 * 1024;       // JSON / HTML
+const qint64 kMaxFileBytes = 64 * 1024 * 1024;      // прошивка / ядро
+const QString kCoresCompleteMarker = QStringLiteral("download_complete.txt");
+
+QNetworkRequest makeRequest(const QUrl& url) {
+    QNetworkRequest req(url);
+    req.setHeader(QNetworkRequest::UserAgentHeader, QStringLiteral("KarabasFlasher/1.0"));
+    req.setAttribute(QNetworkRequest::RedirectPolicyAttribute, QNetworkRequest::NoLessSafeRedirectPolicy);
+    req.setAttribute(QNetworkRequest::CacheLoadControlAttribute, QNetworkRequest::AlwaysNetwork);
+    req.setTransferTimeout(20000);          // таймаут простоя передачи
+    return req;
+}
+
+// Склейка путей без двойных слешей ("D:/" + "/x" -> "D:/x")
+QString joinPath(const QString& dir, const QString& name) {
+    return QDir::cleanPath(dir + QLatin1Char('/') + name);
+}
+}
+
+// ----------------------------------------------------------------------------
+// Служебное
+// ----------------------------------------------------------------------------
+void Worker::guarded(const std::function<void()>& fn) {
+    m_cancel.store(false);
+    m_permissionDenied = false;
+    try {
+        fn();
+    } catch (const std::exception& e) {
+        emit log("Error: Unexpected exception: " + QString::fromLocal8Bit(e.what()));
+    } catch (...) {
+        emit log(QStringLiteral("Error: Unexpected unknown exception."));
+    }
+    emit finished();
+}
+
+bool Worker::pause(int ms) {
+    int left = ms;
+    while (left > 0) {
+        if (m_cancel.load()) return false;
+        const int step = std::min(left, 50);
+        QThread::msleep(static_cast<unsigned long>(step));
+        left -= step;
+    }
+    return !m_cancel.load();
+}
+
+void Worker::runDownload(const Params& p) { guarded([&]() { doDownload(p); }); }
+void Worker::runFlash(const Params& p) { guarded([&]() { doFlash(p); }); }
+
+void Worker::runMsc(const Params& p) {
+    guarded([&]() {
+        if (p.portLocation.isEmpty()) {
+            emit log(QStringLiteral("Error: Please select an active serial port first."));
+            return;
+        }
+        sendMscCommand(p.portLocation);
+    });
+}
+
+// ----------------------------------------------------------------------------
+// Сеть (QNetworkAccessManager, синхронно внутри рабочего потока)
+// ----------------------------------------------------------------------------
+Worker::HttpResult Worker::httpFetch(const QUrl& url, qint64 maxBytes, QSaveFile* file) {
+    HttpResult r;
+    QNetworkAccessManager nam;
+    const QNetworkRequest req = makeRequest(url);
+
+    QNetworkReply* reply = nam.get(req);   // reply принадлежит nam и удалится вместе с ним
+
+    qint64 total = 0;
+    bool tooBig = false;
+    bool writeFailed = false;
+
+    auto drain = [&]() {
+        if (tooBig || writeFailed) return;
+        const QByteArray chunk = reply->readAll();
+        if (chunk.isEmpty()) return;
+        total += chunk.size();
+        if (total > maxBytes) {
+            tooBig = true;
+            reply->abort();
+            return;
+        }
+        if (file) {
+            if (file->write(chunk) != chunk.size()) {
+                writeFailed = true;
+                reply->abort();
+            }
+        } else {
+            r.body.append(chunk);
+        }
+    };
+
+    QEventLoop loop;
+    QObject::connect(reply, &QNetworkReply::readyRead, &loop, drain);
+    QObject::connect(reply, &QNetworkReply::finished, &loop, &QEventLoop::quit);
+
+    QTimer cancelPoll;
+    cancelPoll.setInterval(100);
+    QObject::connect(&cancelPoll, &QTimer::timeout, &loop, [&]() {
+        if (m_cancel.load()) reply->abort();
+    });
+    cancelPoll.start();
+
+    loop.exec();
+    cancelPoll.stop();
+    drain();
+
+    r.status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+    if (m_cancel.load()) {
+        r.error = QStringLiteral("cancelled");
+    } else if (tooBig) {
+        r.error = QStringLiteral("response is too large");
+    } else if (writeFailed) {
+        r.error = QStringLiteral("file write error");
+    } else if (reply->error() != QNetworkReply::NoError) {
+        r.error = reply->errorString();
+        if (r.status != 0) r.error += " (HTTP " + QString::number(r.status) + ")";
+    } else if (r.status != 200) {
+        r.error = "HTTP status " + QString::number(r.status);
+    } else {
+        r.ok = true;
+    }
+    return r;
+}
+
+bool Worker::downloadToFile(const QUrl& url, const QString& dest, QString* err) {
+    QSaveFile f(dest);                       // запись во временный файл + атомарная замена
+    if (!f.open(QIODevice::WriteOnly)) {
+        if (err) *err = "cannot create file: " + f.errorString();
+        return false;
+    }
+    const HttpResult r = httpFetch(url, kMaxFileBytes, &f);
+    if (!r.ok) {
+        f.cancelWriting();
+        if (err) *err = r.error;
+        return false;
+    }
+    if (!f.commit()) {
+        if (err) *err = "cannot save file: " + f.errorString();
+        return false;
+    }
+    return true;
+}
+
+QList<Worker::JobResult> Worker::downloadFiles(const QList<DownloadJob>& jobs, int maxParallel) {
+    QList<JobResult> results;
+    for (int i = 0; i < jobs.size(); ++i) {
+        JobResult r;
+        r.error = QStringLiteral("cancelled");
+        results.append(r);
+    }
+
+    struct Active {
+        int index = -1;
+        QSaveFile* file = nullptr;
+        QElapsedTimer timer;
+        qint64 bytes = 0;
+        bool tooBig = false;
+        bool writeFailed = false;
+    };
+
+    QNetworkAccessManager nam;      // один на все файлы: соединение и TLS-сессия переиспользуются
+    QEventLoop loop;
+    QHash<QNetworkReply*, Active> active;
+    int next = 0;
+
+    // Забрать накопленные данные ответа и записать в файл.
+    // abort() вызывает finished синхронно, поэтому после него Active не трогаем.
+    auto drain = [&](QNetworkReply* reply) {
+        auto it = active.find(reply);
+        if (it == active.end()) return;
+        Active& a = it.value();
+        if (a.tooBig || a.writeFailed) return;
+        const QByteArray chunk = reply->readAll();
+        if (chunk.isEmpty()) return;
+        a.bytes += chunk.size();
+        if (a.bytes > kMaxFileBytes) {
+            a.tooBig = true;
+            reply->abort();
+            return;
+        }
+        if (a.file->write(chunk) != chunk.size()) {
+            a.writeFailed = true;
+            reply->abort();
+        }
+    };
+
+    auto maybeQuit = [&]() {
+        if (active.isEmpty() && (next >= jobs.size() || m_cancel.load())) loop.quit();
+    };
+
+    std::function<void()> startMore;
+
+    auto finish = [&](QNetworkReply* reply) {
+        drain(reply);
+        auto it = active.find(reply);
+        if (it == active.end()) return;
+        const Active a = it.value();
+        active.erase(it);
+
+        JobResult& r = results[a.index];
+        r.bytes = a.bytes;
+        const int status = reply->attribute(QNetworkRequest::HttpStatusCodeAttribute).toInt();
+
+        QString err;
+        if (m_cancel.load()) {
+            err = QStringLiteral("cancelled");
+        } else if (a.tooBig) {
+            err = QStringLiteral("file is too large");
+        } else if (a.writeFailed) {
+            err = QStringLiteral("file write error");
+        } else if (reply->error() != QNetworkReply::NoError) {
+            err = reply->errorString();
+            if (status != 0) err += " (HTTP " + QString::number(status) + ")";
+        } else if (status != 200) {
+            err = "HTTP status " + QString::number(status);
+        }
+
+        if (!err.isEmpty()) {
+            a.file->cancelWriting();
+            r.error = err;
+        } else if (!a.file->commit()) {
+            r.error = "cannot save file: " + a.file->errorString();
+        } else {
+            r.ok = true;
+            r.error.clear();
+        }
+        delete a.file;
+        reply->deleteLater();
+
+        const QString& name = jobs[a.index].name;
+        if (r.ok) {
+            emit log("Downloaded core: " + name + " (" + QString::number(a.bytes / 1024) + " KB, " +
+                     QString::number(a.timer.elapsed() / 1000.0, 'f', 1) + " s)");
+        } else if (!m_cancel.load()) {
+            emit log("Failed to download core: " + name + " (" + r.error + ")");
+        }
+
+        startMore();
+        maybeQuit();
+    };
+
+    startMore = [&]() {
+        while (!m_cancel.load() && static_cast<int>(active.size()) < maxParallel && next < jobs.size()) {
+            const int i = next++;
+            std::unique_ptr<QSaveFile> file(new QSaveFile(jobs[i].dest));
+            if (!file->open(QIODevice::WriteOnly)) {
+                results[i].error = "cannot create file: " + file->errorString();
+                emit log("Failed to download core: " + jobs[i].name + " (" + results[i].error + ")");
+                continue;
+            }
+            QNetworkReply* reply = nam.get(makeRequest(jobs[i].url));
+            Active a;
+            a.index = i;
+            a.file = file.release();
+            a.timer.start();
+            active.insert(reply, a);
+            QObject::connect(reply, &QNetworkReply::readyRead, &loop, [&, reply]() { drain(reply); });
+            QObject::connect(reply, &QNetworkReply::finished, &loop, [&, reply]() { finish(reply); });
+        }
+    };
+
+    QTimer cancelPoll;
+    cancelPoll.setInterval(100);
+    QObject::connect(&cancelPoll, &QTimer::timeout, &loop, [&]() {
+        if (!m_cancel.load()) return;
+        const QList<QNetworkReply*> replies = active.keys();
+        for (QNetworkReply* r : replies) r->abort();       // finish() вызывается для каждого
+        maybeQuit();
+    });
+
+    startMore();
+    if (!active.isEmpty()) {            // loop.quit() до exec() не сработал бы
+        cancelPoll.start();
+        loop.exec();
+        cancelPoll.stop();
+    }
+    return results;
+}
+
+QStringList Worker::fetchCoresList(const ModelInfo& m) {
+    QStringList cores;
+    auto add = [&](const QString& name) {
+        if (!isSafeFileName(name)) return;                       // защита от "../" и т.п.
+        if (!name.endsWith(m.ext, Qt::CaseInsensitive)) return;
+        if (!cores.contains(name)) cores << name;
+    };
+
+    const HttpResult api = httpFetch(
+        QUrl("https://api.github.com/repos/andykarpov/" + m.repo + "/contents/cores"), kMaxTextBytes, nullptr);
+    if (api.ok) {
+        QJsonParseError pe;
+        const QJsonDocument doc = QJsonDocument::fromJson(api.body, &pe);
+        if (pe.error == QJsonParseError::NoError && doc.isArray()) {
+            const QJsonArray arr = doc.array();
+            for (const QJsonValue& v : arr) add(v.toObject().value(QStringLiteral("name")).toString());
+        }
+    } else if (!m_cancel.load()) {
+        emit log("Warning: GitHub API request failed (" + api.error + "). Trying HTML page...");
+    }
+
+    if (cores.isEmpty() && !m_cancel.load()) {
+        const HttpResult html = httpFetch(
+            QUrl("https://github.com/andykarpov/" + m.repo + "/tree/master/cores"), kMaxTextBytes, nullptr);
+        if (html.ok) {
+            // ".kg1" не должно совпадать с началом ".kg10" - отсекаем продолжение имени
+            const QRegularExpression re(
+                "([A-Za-z0-9_\\-.]+" + QRegularExpression::escape(m.ext) + ")(?![A-Za-z0-9_\\-.])",
+                QRegularExpression::CaseInsensitiveOption);
+            const QString text = QString::fromUtf8(html.body);
+            QRegularExpressionMatchIterator it = re.globalMatch(text);
+            while (it.hasNext()) add(it.next().captured(1));
+        } else if (!m_cancel.load()) {
+            emit log("Error: Failed to connect to GitHub repository '" + m.repo + "' (" + html.error + ").");
+        }
+    }
+    return cores;
+}
+
+// ----------------------------------------------------------------------------
+// Скачивание
+// ----------------------------------------------------------------------------
+void Worker::doDownload(const Params& p) {
+    if (p.modelIndex < 0 || p.modelIndex >= models().size()) {
+        emit log(QStringLiteral("Error: Unknown device model selected."));
+        return;
+    }
+    const ModelInfo& m = models().at(p.modelIndex);
+
+    const QString wd = workDir();
+    if (!QDir().mkpath(wd)) {
+        emit log("Error: Cannot create working directory: " + wd);
+        return;
+    }
+    const QString destFile = wd + QStringLiteral("/firmware_temp.uf2");
+    const QString coresDir = wd + QStringLiteral("/cores");
+
+    emit log("Starting download for model: " + m.name);
+    emit log("URL: " + m.firmwareUrl);
+
+    QString err;
+    QElapsedTimer fwTimer;
+    fwTimer.start();
+    if (!downloadToFile(QUrl(m.firmwareUrl), destFile, &err)) {
+        emit log(m_cancel.load() ? QStringLiteral("Download cancelled.") : "Download error: " + err);
+        return;
+    }
+    QString why;
+    if (!isValidUf2(destFile, &why)) {
+        emit log("Error: Downloaded file is not a valid UF2 image (" + why + "). It was discarded.");
+        QFile::remove(destFile);
+        return;
+    }
+    emit firmwareReady(destFile);
+    emit log("Successfully downloaded firmware (" + QString::number(QFileInfo(destFile).size() / 1024) + " KB, " +
+             QString::number(fwTimer.elapsed() / 1000.0, 'f', 1) + " s). Path: " + destFile);
+
+    if (!p.updateCores) {
+        emit log(QStringLiteral("Skipping cores download because checkbox is unchecked."));
+        return;
+    }
+
+    emit log(QStringLiteral("Fetching actual cores list from GitHub repository..."));
+    QElapsedTimer listTimer;
+    listTimer.start();
+    const QStringList cores = fetchCoresList(m);
+    emit log("Cores list request took " + QString::number(listTimer.elapsed() / 1000.0, 'f', 1) + " s.");
+    if (m_cancel.load()) {
+        emit log(QStringLiteral("Operation cancelled by user."));
+        return;
+    }
+    if (cores.isEmpty()) {
+        emit log(QStringLiteral("Warning: Could not parse cores list or directory is empty for target filter."));
+        return;
+    }
+    emit log("Found " + QString::number(cores.size()) + " core files (" + m.ext + "). Starting download...");
+
+    // Старые ядра в рабочей папке удаляем, чтобы не раскатать устаревшие файлы
+    QDir(coresDir).removeRecursively();
+    if (!QDir().mkpath(coresDir)) {
+        emit log(QStringLiteral("Error: Cannot create temp folder for cores."));
+        return;
+    }
+
+    const QString baseUrl = "https://raw.githubusercontent.com/andykarpov/" + m.repo + "/master/cores/";
+    QList<DownloadJob> jobs;
+    for (const QString& core : cores) {
+        DownloadJob j;
+        j.url = QUrl(baseUrl + QString::fromLatin1(QUrl::toPercentEncoding(core)));
+        j.dest = coresDir + "/" + core;
+        j.name = core;
+        jobs.append(j);
+    }
+
+    QElapsedTimer coresTimer;
+    coresTimer.start();
+    const QList<JobResult> results = downloadFiles(jobs, 4);
+    if (m_cancel.load()) {
+        emit log(QStringLiteral("Operation cancelled by user."));
+        return;
+    }
+
+    int okCount = 0;
+    qint64 totalBytes = 0;
+    for (const JobResult& r : results) {
+        if (r.ok) {
+            ++okCount;
+            totalBytes += r.bytes;
+        }
+    }
+    const double secs = coresTimer.elapsed() / 1000.0;
+    const qint64 speedKb = secs > 0.0 ? static_cast<qint64>(totalBytes / 1024.0 / secs) : 0;
+    emit log("Cores download completed. Successfully updated: " + QString::number(okCount) + "/" +
+             QString::number(cores.size()) + " (" + QString::number(totalBytes / 1024) + " KB in " +
+             QString::number(secs, 'f', 1) + " s, " + QString::number(speedKb) + " KB/s)");
+
+    if (okCount == cores.size()) {
+        // Маркер полноты набора: прошивка с обновлением ядер без него не запустится
+        QFile marker(coresDir + "/" + kCoresCompleteMarker);
+        if (!marker.open(QIODevice::WriteOnly)) {
+            emit log("Warning: Could not create the completion marker (" + marker.errorString() +
+                     "). Flashing with 'Update core too' will be refused.");
+        }
+    } else {
+        emit log(QStringLiteral("Warning: Cores set is incomplete. Flashing with 'Update core too' will be "
+                                "refused until all cores download."));
+    }
+}
+
+// ----------------------------------------------------------------------------
+// Последовательный порт
+// ----------------------------------------------------------------------------
+bool Worker::isPortPresent(const QString& portLocation) {
+    const QList<QSerialPortInfo> ports = QSerialPortInfo::availablePorts();
+    for (const QSerialPortInfo& i : ports) {
+        if (i.systemLocation() == portLocation) return true;
+    }
+    return false;
+}
+
+bool Worker::sendMscCommand(const QString& portLocation) {
+    emit log("Sending AT+KARABAS=msc command to " + portLocation + "...");
+
+    QSerialPort sp;
+    sp.setPortName(portLocation);
+    sp.setBaudRate(QSerialPort::Baud115200);
+    sp.setDataBits(QSerialPort::Data8);
+    sp.setParity(QSerialPort::NoParity);
+    sp.setStopBits(QSerialPort::OneStop);
+    sp.setFlowControl(QSerialPort::NoFlowControl);
+
+    if (!sp.open(QIODevice::ReadWrite)) {
+        QString msg = "Error: Failed to open " + portLocation + ": " + sp.errorString() + ".";
+#if defined(Q_OS_LINUX)
+        if (sp.error() == QSerialPort::PermissionError) {
+            msg += " No permission to access the port.";
+            m_permissionDenied = true;
+        } else {
+            msg += " Make sure it is not used by another app (e.g. ModemManager).";
+        }
+#else
+        msg += " Make sure the port is not used by another application.";
+#endif
+        emit log(msg);
+        if (m_permissionDenied) emit portAccessDenied(portLocation);
+        return false;
+    }
+
+    const QByteArray cmd = "AT+KARABAS=msc\r\n";
+    if (sp.write(cmd) != cmd.size() || !sp.waitForBytesWritten(2000)) {
+        emit log(QStringLiteral("Error: Failed to write data to the serial port."));
+        return false;
+    }
+    emit log(QStringLiteral("Command sent successfully. Waiting for device reboot into MSC..."));
+
+    if (sp.waitForReadyRead(1000)) {
+        QByteArray resp = sp.readAll();
+        while (sp.waitForReadyRead(50)) resp += sp.readAll();
+        const QString text = QString::fromUtf8(resp).trimmed();
+        if (!text.isEmpty()) emit log("Device response: " + text);
+    }
+    return true;
+}
+
+// Сброс 1200 bps для перехода в режим RP2040 bootloader
+bool Worker::resetPortToBootloader(const QString& portLocation) {
+    if (portLocation.isEmpty()) return false;
+    emit log("Opening port " + portLocation + " to send reboot command to bootloader...");
+
+    QSerialPort sp;
+    sp.setPortName(portLocation);
+    sp.setBaudRate(1200);
+    if (!sp.open(QIODevice::ReadWrite)) {
+        emit log("Failed to open port " + portLocation + " for 1200 bps reset: " + sp.errorString());
+#if defined(Q_OS_LINUX)
+        if (sp.error() == QSerialPort::PermissionError) {
+            m_permissionDenied = true;
+            emit portAccessDenied(portLocation);
+        }
+#endif
+        return false;
+    }
+    sp.setBaudRate(1200);
+    sp.setDataTerminalReady(true);
+    QThread::msleep(50);
+    sp.setDataTerminalReady(false);
+    sp.close();
+
+    emit log("Reset 1200 bps signal sent to " + portLocation + ".");
+    return true;
+}
+
+// ----------------------------------------------------------------------------
+// Ожидание тома. Если появился ровно один подходящий диск - ждём автомонтирования
+// (~3 с), затем монтируем сами через udisks. Несколько подходящих дисков - ошибка.
+// ----------------------------------------------------------------------------
+bool Worker::waitForMountedVolume(const std::function<QList<Platform::Candidate>()>& finder,
+                                  int timeoutMs, Platform::Candidate* out) {
+    QElapsedTimer total;
+    total.start();
+    QElapsedTimer unmountedFor;
+    bool seenUnmounted = false;
+    qint64 lastMountTry = -100000;
+
+    while (total.elapsed() < timeoutMs) {
+        if (!pause(500)) return false;                 // отмена
+
+        const QList<Platform::Candidate> found = finder();
+        if (found.size() > 1) {
+            QStringList ids;
+            for (const Platform::Candidate& c : found) ids << c.diskId;
+            emit log("Error: More than one matching disk appeared (" + ids.join(", ") +
+                     "). Leave only the Karabas connected and try again.");
+            return false;
+        }
+        if (found.isEmpty()) {
+            seenUnmounted = false;
+            continue;
+        }
+
+        Platform::Candidate c = found.first();
+        if (!c.mountPoint.isEmpty()) {
+            *out = c;
+            return true;
+        }
+        if (!seenUnmounted) {
+            seenUnmounted = true;
+            unmountedFor.start();
+        }
+        if (unmountedFor.elapsed() >= 2000 && total.elapsed() - lastMountTry >= 2000) {
+            lastMountTry = total.elapsed();
+            QString detail;
+            if (Platform::mountCandidate(c, &detail)) {
+                emit log("Mounted " + c.node + " at " + c.mountPoint);
+                *out = c;
+                return true;
+            }
+            emit log("Warning: Automatic mount failed: " + detail);
+        }
+    }
+    return false;
+}
+
+bool Worker::ejectBestEffort(const Platform::Candidate& sd) {
+    QString detail;
+    if (Platform::ejectCandidate(sd, &detail)) {
+        emit log("Success: SD Card drive safely ejected." + (detail.isEmpty() ? QString() : " (" + detail + ")"));
+        return true;
+    }
+    emit log("Warning: Failed to safely eject drive: " + detail);
+    return false;
+}
+
+void Worker::rollbackCores(const QStringList& copiedNew, const QList<QPair<QString, QString>>& movedOld) {
+    for (const QString& f : copiedNew) QFile::remove(f);
+    int restored = 0;
+    for (const auto& pr : movedOld) {
+        if (QFile::rename(pr.second, pr.first)) ++restored;
+    }
+    emit log("Warning: Rollback performed. Restored " + QString::number(restored) + " of " +
+             QString::number(movedOld.size()) + " original core files.");
+}
+
+// ----------------------------------------------------------------------------
+// Переключение в MSC, бэкап старых ядер, копирование новых, извлечение диска.
+// true - можно продолжать прошивку; false - операция прервана.
+// ----------------------------------------------------------------------------
+bool Worker::updateCoresOnSd(const ModelInfo& m, const QString& portLocation, const QStringList& newCores) {
+    emit log(QStringLiteral("Cores check active. Switching Karabas to SD Card MSC mode..."));
+
+    // Снимок USB-дисков с носителем ДО переключения
+    const QSet<QString> before = Platform::readyRemovableDisks();
+    {
+        QStringList list = before.values();
+        list.sort();
+        emit log("USB disks with media before switch: " + (list.isEmpty() ? QStringLiteral("none") : list.join(", ")));
+    }
+
+    if (!sendMscCommand(portLocation)) {
+        emit log(QStringLiteral("Error: Could not switch the device to MSC mode. Aborting."));
+        return false;
+    }
+
+    emit log(QStringLiteral("Waiting for SD Card storage drive to mount..."));
+    Platform::Candidate sd;
+    if (!waitForMountedVolume([&before]() { return Platform::newDisks(before); }, 40000, &sd)) {
+        if (m_cancel.load()) {
+            emit log(QStringLiteral("Operation cancelled by user. The device may stay in MSC mode - replug it."));
+        } else {
+            emit log(QStringLiteral("Error: SD card storage drive not detected after switching mode."));
+            emit log(Platform::diagnostics());
+        }
+        return false;
+    }
+    emit log("Found SD Card drive: " + sd.mountPoint + " [" + sd.label + "] (" + sd.node + ")");
+
+    // ---- Дальше отмена не проверяется: операции над SD доводятся до конца ----
+    const QString root = sd.mountPoint;
+    const QString backupDir =
+        joinPath(root, "backup_" + QDateTime::currentDateTime().toString("yyyy-MM-dd_HH-mm-ss"));
+    if (!QDir().mkpath(backupDir)) {
+        emit log("Error: Failed to create backup folder: " + backupDir);
+        ejectBestEffort(sd);
+        return false;
+    }
+    emit log("Success: Created backup folder: " + backupDir);
+
+    // 1) Бэкап старых ядер
+    emit log("Moving existing cores (" + m.ext + ") from SD root to backup folder...");
+    const QStringList oldCores = listFilesWithExt(root, m.ext);
+    QList<QPair<QString, QString>> movedOld;
+    bool moveFailed = false;
+    for (const QString& src : oldCores) {
+        const QString dst = joinPath(backupDir, QFileInfo(src).fileName());
+        if (QFile::exists(dst)) QFile::remove(dst);
+        if (QFile::rename(src, dst)) {
+            movedOld.append(qMakePair(src, dst));
+        } else {
+            emit log("Warning: Failed to move file " + QFileInfo(src).fileName());
+            moveFailed = true;
+            break;
+        }
+    }
+    emit log("Backup finished. Moved " + QString::number(movedOld.size()) + " files.");
+    if (moveFailed) {
+        rollbackCores(QStringList(), movedOld);
+        emit log(QStringLiteral("Error: Backup step failed. Aborting before any new core is written."));
+        ejectBestEffort(sd);
+        return false;
+    }
+
+    // 2) Копирование новых ядер (копия, а не перенос: рабочая папка остаётся для повторной прошивки)
+    emit log(QStringLiteral("Copying new cores to SD root..."));
+    QStringList copiedNew;
+    bool copyFailed = false;
+    for (const QString& src : newCores) {
+        const QString dst = joinPath(root, QFileInfo(src).fileName());
+        QString e;
+        if (!copyFileSynced(src, dst, &e)) {
+            emit log("Warning: Failed to copy new core " + QFileInfo(src).fileName() + ": " + e);
+            QFile::remove(dst);
+            copyFailed = true;
+            break;
+        }
+        if (QFileInfo(src).size() != QFileInfo(dst).size()) {
+            emit log("Warning: Size mismatch after copying " + QFileInfo(src).fileName() + ".");
+            QFile::remove(dst);
+            copyFailed = true;
+            break;
+        }
+        copiedNew << dst;
+    }
+    if (copyFailed) {
+        rollbackCores(copiedNew, movedOld);
+        emit log(QStringLiteral("Error: Core deployment failed. Original cores were restored. Aborting."));
+        ejectBestEffort(sd);
+        return false;
+    }
+    emit log("Deployment finished. Copied " + QString::number(copiedNew.size()) + " new core files to SD root.");
+
+    if (movedOld.isEmpty()) QDir().rmdir(backupDir);     // пустую папку бэкапа убираем
+
+    emit log(QStringLiteral("Ejecting SD Card drive from system..."));
+    if (!ejectBestEffort(sd)) {
+        // Без eject Карабас не выйдет из режима MSC, порта не будет - ждать его бессмысленно
+        emit log(QStringLiteral("Error: The SD card could not be ejected, so the device cannot leave MSC mode by "
+                                "itself. The new cores are already on the card. Replug the Karabas (unplug and plug "
+                                "the USB cable), then press FLASH again with 'Update core too' unchecked to finish "
+                                "flashing the firmware."));
+        return false;
+    }
+    return true;
+}
+
+// ----------------------------------------------------------------------------
+// Прошивка
+// ----------------------------------------------------------------------------
+void Worker::doFlash(const Params& p) {
+    // --- Предварительные проверки: ДО любых действий с SD-картой и устройством ---
+    if (p.firmwarePath.isEmpty()) {
+        emit log(QStringLiteral("Error: Firmware file not selected."));
+        return;
+    }
+    {
+        QString why;
+        if (!isValidUf2(p.firmwarePath, &why)) {
+            emit log("Error: Firmware file is not usable: " + why);
+            return;
+        }
+    }
+
+    if (p.updateCores) {
+        if (p.modelIndex < 0 || p.modelIndex >= models().size()) {
+            emit log(QStringLiteral("Error: Unknown device model selected."));
+            return;
+        }
+        const ModelInfo& m = models().at(p.modelIndex);
+        if (p.portLocation.isEmpty()) {
+            emit log(QStringLiteral("Error: Updating cores requires a serial port (to send the MSC command)."));
+            return;
+        }
+        const QString coresDir = workDir() + QStringLiteral("/cores");
+        if (!QFile::exists(coresDir + "/" + kCoresCompleteMarker)) {
+            emit log(QStringLiteral("Error: No complete set of downloaded cores found. Check 'Update core too' and "
+                                    "press 'Download via GitHub' first."));
+            return;
+        }
+        const QStringList newCores = listFilesWithExt(coresDir, m.ext);
+        if (newCores.isEmpty()) {
+            emit log("Error: No downloaded core files (" + m.ext +
+                     ") for the selected model. Press 'Download via GitHub' first.");
+            return;
+        }
+
+        if (!updateCoresOnSd(m, p.portLocation, newCores)) return;
+
+        emit log(QStringLiteral("Waiting for device to become available as a serial port again..."));
+        bool portFound = false;
+        for (int i = 0; i < 40 && !portFound; ++i) {
+            if (!pause(500)) {
+                emit log(QStringLiteral("Operation cancelled by user."));
+                return;
+            }
+            portFound = isPortPresent(p.portLocation);
+        }
+        if (portFound) {
+            emit log("Port " + p.portLocation + " is back online.");
+        } else {
+            emit log("Warning: Chosen port " + p.portLocation +
+                     " not detected automatically (the device name may have changed). Trying to open directly.");
+        }
+        if (!resetPortToBootloader(p.portLocation) && m_permissionDenied) {
+            emit log(QStringLiteral("Error: No permission to access the serial port. Aborting before flashing."));
+            return;
+        }
+    } else if (!p.portLocation.isEmpty()) {
+        if (!resetPortToBootloader(p.portLocation) && m_permissionDenied) {
+            emit log(QStringLiteral("Error: No permission to access the serial port. Aborting before flashing."));
+            return;
+        }
+    }
+
+    emit log(QStringLiteral("Waiting for RPI-RP2 bootloader drive to appear..."));
+    Platform::Candidate boot;
+    if (!waitForMountedVolume([]() { return Platform::bootloaderDisks(); }, 25000, &boot)) {
+        if (m_cancel.load()) {
+            emit log(QStringLiteral("Operation cancelled by user."));
+        } else {
+            emit log(QStringLiteral("Error: Removable drive 'RPI-RP2' not found. Please connect the device in "
+                                    "bootloader mode manually."));
+            emit log(Platform::diagnostics());
+        }
+        return;
+    }
+    emit log("Target drive found: " + boot.mountPoint + " [RPI-RP2]");
+
+    // ---- Запись прошивки: не прерывается ----
+    const QString target = joinPath(boot.mountPoint, QStringLiteral("firmware.uf2"));
+    emit log("Copying firmware to device: " + target);
+
+    QString err;
+    if (copyFileSynced(p.firmwarePath, target, &err)) {
+        emit log(QStringLiteral("Process completed successfully. Device is rebooting with new firmware."));
+    } else {
+        // RP2040 перезагружается сразу после записи последнего блока - копирование
+        // может сообщить об ошибке, хотя прошивка уже принята.
+        QThread::msleep(1500);
+        if (Platform::bootloaderDisks().isEmpty()) {
+            emit log("Warning: Copy reported an error (" + err +
+                     "), but the bootloader drive has disappeared - the device most likely rebooted with the "
+                     "new firmware. Please verify.");
+        } else {
+            emit log("Flash write error: " + err);
+        }
+    }
+}

@@ -1,0 +1,93 @@
+name: Build
+
+on:
+  push:
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  QT_VERSION: "6.7.3"
+
+jobs:
+  macos:
+    name: macOS (universal .dmg)
+    runs-on: macos-14
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: qtserialport
+          cache: true
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_OSX_ARCHITECTURES="arm64;x86_64"
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Bundle Qt and create .dmg
+        run: macdeployqt build/KarabasFlasher.app -dmg
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KarabasFlasher-macos
+          path: build/KarabasFlasher.dmg
+
+  windows:
+    name: Windows (zip)
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          arch: win64_msvc2019_64
+          modules: qtserialport
+          cache: true
+
+      - name: Configure
+        run: cmake -S . -B build -A x64
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Bundle Qt and zip
+        shell: pwsh
+        run: |
+          windeployqt build/Release/KarabasFlasher.exe
+          Compress-Archive -Path build/Release/* -DestinationPath KarabasFlasher-windows.zip
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KarabasFlasher-windows
+          path: KarabasFlasher-windows.zip
+
+  linux:
+    name: Linux (compile check + binary)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y cmake qt6-base-dev qt6-serialport-dev libgl1-mesa-dev
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KarabasFlasher-linux
+          path: build/KarabasFlasher

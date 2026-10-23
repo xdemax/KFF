@@ -1,0 +1,110 @@
+# Karabas Go Family Firmware Flasher (Qt6)
+
+Одна кодовая база на Qt6 для Linux, Windows и macOS. Общий код (интерфейс, сеть, логика прошивки)
+одинаков везде; всё, что зависит от ОС при работе с дисками, вынесено в `src/Platform.h`
+и реализовано отдельно для каждой системы:
+
+| ОС      | Файл                      | Статус |
+|---------|---------------------------|--------|
+| Linux   | `src/platform_linux.cpp`  | написан, не проверен на железе |
+| Windows | `src/platform_windows.cpp`| логика перенесена из проверенной версии на WinAPI; в составе Qt-проекта не проверена |
+| macOS   | `src/platform_macos.cpp`  | написан без Mac, не проверен |
+
+## Сборка
+
+Нужны CMake, компилятор C++17 и Qt 6 с модулями Base и SerialPort.
+
+### Linux
+
+Debian / Ubuntu:
+
+    sudo apt install build-essential cmake qt6-base-dev qt6-serialport-dev udisks2 eject
+
+Fedora: `sudo dnf install gcc-c++ cmake qt6-qtbase-devel qt6-qtserialport-devel udisks2`
+Arch:   `sudo pacman -S base-devel cmake qt6-base qt6-serialport udisks2`
+
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+    cmake --build build -j
+    ./build/KarabasFlasher --log
+
+### Windows
+
+Установите Qt 6 (комплект MSVC или MinGW) и откройте `CMakeLists.txt` в Qt Creator, либо:
+
+    cmake -S . -B build -DCMAKE_PREFIX_PATH=C:/Qt/6.x.x/<kit>
+    cmake --build build --config Release
+
+Для раздачи соберите папку с DLL: `windeployqt build\Release\KarabasFlasher.exe`.
+Без подписи кода SmartScreen может показать предупреждение.
+
+### macOS
+
+    brew install cmake qt
+    cmake -S . -B build -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" -DCMAKE_BUILD_TYPE=Release
+    cmake --build build -j
+
+Упаковка: `macdeployqt build/KarabasFlasher.app -dmg`. Homebrew-Qt собран под одну архитектуру,
+поэтому бинарник будет для вашего процессора (arm64 или Intel). Универсальная сборка требует
+универсального Qt. Без подписи и нотаризации Gatekeeper блокирует первый запуск: откройте
+приложение через «Системные настройки - Конфиденциальность и безопасность - Всё равно открыть».
+Начиная с macOS Ventura система может запросить доступ к съёмным томам.
+
+Ключ `--log` включает запись лога в файл: `~/.local/share/KarabasFlasher/flasher_log.txt` (Linux),
+`%APPDATA%\KarabasFlasher\flasher_log.txt` (Windows), `~/Library/Application Support/KarabasFlasher/` (macOS).
+
+## Автоматическая сборка (GitHub Actions)
+
+В `.github/workflows/build.yml` описана сборка под три системы. Положите проект в репозиторий на
+GitHub (`git init && git add . && git commit -m init && git push`), откройте вкладку **Actions** -
+сборка запустится сама. Готовые файлы лежат в разделе **Artifacts** завершённого запуска:
+`KarabasFlasher-macos` (.dmg, universal arm64 + Intel), `KarabasFlasher-windows` (zip с DLL Qt),
+`KarabasFlasher-linux` (бинарник; нужен системный Qt). Заодно это проверка компиляции на всех системах.
+
+Сборки не подписаны. На macOS скачанный из браузера `.dmg` получает карантин: после перетаскивания в
+«Программы» выполните `xattr -dr com.apple.quarantine /Applications/KarabasFlasher.app`
+или откройте приложение через «Всё равно открыть» в настройках безопасности.
+
+## Настройка системы
+
+### Linux
+
+1. **Доступ к порту.** При ошибке «Доступ запрещён» программа сама предложит установить правило
+   udev (`TAG+="uaccess"`) для вашего устройства; пароль администратора запросит polkit (`pkexec`)
+   один раз, перелогин не нужен. Если `pkexec` недоступен - добавьте себя в группу `dialout`
+   (в Arch и Manjaro - `uucp`) и перелогиньтесь:
+
+       sudo usermod -aG dialout $USER
+
+   При установке из пакета правило `packaging/70-karabas.rules` ставится в `lib/udev/rules.d`
+   автоматически (`cmake --install`), и пароль не нужен вообще.
+
+2. **ModemManager** может опрашивать `/dev/ttyACM*` AT-командами и мешать. Найдите VID:PID (`lsusb`)
+   и создайте `/etc/udev/rules.d/70-karabas.rules`:
+
+       ATTRS{idVendor}=="XXXX", ATTRS{idProduct}=="YYYY", ENV{ID_MM_DEVICE_IGNORE}="1"
+
+   затем `sudo udevadm control --reload && sudo udevadm trigger`.
+
+3. **udisks2** нужен для монтирования и извлечения SD-карты (`udisksctl` и `gdbus`/`busctl`).
+   Извлечение выполняется D-Bus-вызовом udisks `Drive.Eject` (SCSI-eject с правами системы),
+   запасной вариант - утилита `eject`. `udisksctl power-off` не используется: он отключает
+   питание USB-порта, и Карабас не возвращается в обычный режим.
+
+### Windows и macOS
+
+Дополнительная настройка не нужна: драйвер CDC в Windows 10 и новее встроенный, на macOS порт
+виден как `/dev/cu.usbmodem*`.
+
+## Как программа находит диск
+
+Диск не ищется по букве, пути или метке. Перед командой MSC делается снимок съёмных дисков с
+готовым носителем, а SD - это диск, у которого носитель появился после команды. Загрузчик
+RP2040 ищется по метке `RPI-RP2`. Если подходящих дисков несколько, программа останавливается
+с сообщением, а не угадывает.
+
+## Что не проверено на железе
+
+Наиболее вероятные места расхождений: на Linux - определение SD по `/sys/block`, монтирование
+через udisksctl, извлечение (`eject` / `power-off`) и возврат Карабаса в режим CDC после него;
+на всех системах - сброс 1200 bps через QSerialPort; на macOS - весь платформенный слой.
+При проблемах запустите с `--log` и пришлите файл лога.

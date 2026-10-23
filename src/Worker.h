@@ -1,0 +1,88 @@
+#pragma once
+#include <QByteArray>
+#include <QList>
+#include <QObject>
+#include <QPair>
+#include <QString>
+#include <QStringList>
+#include <QUrl>
+
+#include <atomic>
+#include <functional>
+
+#include "Models.h"
+#include "Platform.h"
+
+class QSaveFile;
+
+struct Params {
+    int modelIndex = -1;
+    bool updateCores = false;
+    QString portLocation;       // например /dev/ttyACM0; пусто = пропустить сброс
+    QString firmwarePath;
+};
+
+// Фоновый исполнитель. Живёт в отдельном QThread, управляется из GUI через
+// QMetaObject::invokeMethod. Отмена - флаг m_cancel, проверяется только в безопасных точках.
+class Worker : public QObject {
+    Q_OBJECT
+public:
+    explicit Worker(QObject* parent = nullptr) : QObject(parent) {}
+
+    void requestCancel() { m_cancel.store(true); }     // можно вызывать из GUI-потока
+
+    void runDownload(const Params& p);
+    void runFlash(const Params& p);
+    void runMsc(const Params& p);
+
+signals:
+    void log(const QString& message);
+    void firmwareReady(const QString& path);
+    void finished();                                    // операция завершена (успешно или нет)
+    void portAccessDenied(const QString& portLocation); // нет прав на порт (Linux)
+
+private:
+    struct HttpResult {
+        bool ok = false;
+        int status = 0;
+        QString error;
+        QByteArray body;
+    };
+
+    struct DownloadJob {
+        QUrl url;
+        QString dest;
+        QString name;
+    };
+    struct JobResult {
+        bool ok = false;
+        QString error;
+        qint64 bytes = 0;
+    };
+
+    void guarded(const std::function<void()>& fn);
+    bool pause(int ms);                                 // false, если запрошена отмена
+
+    HttpResult httpFetch(const QUrl& url, qint64 maxBytes, QSaveFile* file);
+    bool downloadToFile(const QUrl& url, const QString& dest, QString* err);
+    // Параллельная загрузка нескольких файлов через ОДИН QNetworkAccessManager
+    // (общее соединение, до maxParallel файлов одновременно).
+    QList<JobResult> downloadFiles(const QList<DownloadJob>& jobs, int maxParallel);
+    QStringList fetchCoresList(const ModelInfo& m);
+
+    void doDownload(const Params& p);
+    void doFlash(const Params& p);
+
+    bool sendMscCommand(const QString& portLocation);
+    bool resetPortToBootloader(const QString& portLocation);
+    bool isPortPresent(const QString& portLocation);
+
+    bool waitForMountedVolume(const std::function<QList<Platform::Candidate>()>& finder,
+                              int timeoutMs, Platform::Candidate* out);
+    bool updateCoresOnSd(const ModelInfo& m, const QString& portLocation, const QStringList& newCores);
+    void rollbackCores(const QStringList& copiedNew, const QList<QPair<QString, QString>>& movedOld);
+    bool ejectBestEffort(const Platform::Candidate& sd);
+
+    std::atomic<bool> m_cancel{false};
+    bool m_permissionDenied = false;                    // только рабочий поток
+};

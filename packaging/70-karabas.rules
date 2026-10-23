@@ -1,0 +1,4 @@
+# Доступ к Karabas (RP2040 CDC, USB 2e8a:000a) для пользователя, сидящего за компьютером.
+# Файл должен иметь номер меньше 73 (uaccess обрабатывает 73-seat-late.rules).
+# Устанавливается пакетом в /usr/lib/udev/rules.d/ (пароль администратора не нужен).
+SUBSYSTEM=="tty", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="000a", TAG+="uaccess", ENV{ID_MM_DEVICE_IGNORE}="1"
