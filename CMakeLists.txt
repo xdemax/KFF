@@ -5,7 +5,15 @@ set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
 
-find_package(Qt6 REQUIRED COMPONENTS Core Gui Widgets Network SerialPort)
+find_package(Qt6 QUIET COMPONENTS Core Gui Widgets Network SerialPort)
+if(NOT Qt6_FOUND)
+    message(FATAL_ERROR
+        "Qt 6 (Core, Gui, Widgets, Network, SerialPort) was not found.\n"
+        "  Ubuntu/Debian: sudo apt install qt6-base-dev qt6-serialport-dev libgl1-mesa-dev\n"
+        "  Fedora:        sudo dnf install qt6-qtbase-devel qt6-qtserialport-devel\n"
+        "  Arch/Manjaro:  sudo pacman -S qt6-base qt6-serialport\n"
+        "If Qt is installed in a non-standard place, pass -DCMAKE_PREFIX_PATH=<path to Qt>.")
+endif()
 
 # Версия: номер из project(... VERSION) + описание из git (тег, число коммитов, хэш, -dirty).
 # Описание считается при конфигурации; если git нет (сборка из zip), будет "no-git".
@@ -67,4 +75,31 @@ install(TARGETS KarabasFlasher RUNTIME DESTINATION bin BUNDLE DESTINATION .)
 # Linux: правило udev выдаёт доступ к порту Карабаса без группы dialout/uucp
 if(UNIX AND NOT APPLE)
     install(FILES packaging/70-karabas.rules DESTINATION lib/udev/rules.d)
+    install(FILES packaging/karabas-flasher.desktop DESTINATION share/applications)
+    install(FILES packaging/karabas-flasher.svg DESTINATION share/icons/hicolor/scalable/apps)
+    install(FILES LICENSE DESTINATION share/doc/karabas-flasher RENAME copyright)
+    install(FILES THIRD_PARTY.md DESTINATION share/doc/karabas-flasher)
+
+    # ---- Пакет .deb (Ubuntu/Debian): cd build && cpack -G DEB ----
+    # Зависимости определяются автоматически по бинарнику (dpkg-shlibdeps) и дополняются вручную,
+    # поэтому `sudo apt install ./karabas-flasher_*.deb` сам доставит Qt, udisks2 и остальное.
+    set(CPACK_GENERATOR "DEB")
+    set(CPACK_PACKAGE_NAME "karabas-flasher")
+    set(CPACK_PACKAGE_VERSION "${PROJECT_VERSION}")
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY "Firmware and core flasher for Karabas Go boards")
+    set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
+    set(CPACK_DEBIAN_PACKAGE_MAINTAINER "Karabas Flasher <noreply@users.noreply.github.com>")
+    set(CPACK_DEBIAN_PACKAGE_SECTION "electronics")
+    set(CPACK_DEBIAN_FILE_NAME DEB-DEFAULT)
+    set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+    set(CPACK_DEBIAN_PACKAGE_DEPENDS "udisks2, libglib2.0-bin, ca-certificates")
+    set(CPACK_DEBIAN_PACKAGE_RECOMMENDS "qt6-qpa-plugins, qt6-wayland, pkexec | policykit-1, eject")
+
+    # postinst: перечитать правила udev. Права 755 выставляются при конфигурации,
+    # чтобы не зависеть от прав файла в zip или git.
+    file(COPY packaging/debian/postinst DESTINATION ${CMAKE_BINARY_DIR}/debian
+         FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+    set(CPACK_DEBIAN_PACKAGE_CONTROL_EXTRA "${CMAKE_BINARY_DIR}/debian/postinst")
+
+    include(CPack)
 endif()

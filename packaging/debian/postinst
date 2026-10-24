@@ -1,0 +1,8 @@
+#!/bin/sh
+set -e
+# Применить правило доступа к порту Карабаса (70-karabas.rules) без перезагрузки
+if [ "$1" = "configure" ] && command -v udevadm >/dev/null 2>&1; then
+    udevadm control --reload || true
+    udevadm trigger --subsystem-match=tty --action=change || true
+fi
+exit 0

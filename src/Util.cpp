@@ -38,6 +38,21 @@ QStringList listFilesWithExt(const QString& dir, const QString& ext) {
     return out;
 }
 
+QProcessEnvironment cleanChildEnvironment() {
+    QProcessEnvironment env = QProcessEnvironment::systemEnvironment();
+    const QString appdir = env.value(QStringLiteral("APPDIR"));
+    if (!appdir.isEmpty()) {
+        QStringList keep;
+        const QStringList parts = env.value(QStringLiteral("LD_LIBRARY_PATH")).split(QLatin1Char(':'), Qt::SkipEmptyParts);
+        for (const QString& e : parts) {
+            if (!e.startsWith(appdir)) keep << e;
+        }
+        if (keep.isEmpty()) env.remove(QStringLiteral("LD_LIBRARY_PATH"));
+        else env.insert(QStringLiteral("LD_LIBRARY_PATH"), keep.join(QLatin1Char(':')));
+    }
+    return env;
+}
+
 static void setErr(QString* e, const QString& m) {
     if (e) *e = m;
 }

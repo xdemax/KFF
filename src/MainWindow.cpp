@@ -311,6 +311,7 @@ void MainWindow::onPortAccessDenied(const QString& portLocation) {
             .arg(rule, file, oldFile);
 
     m_accessProc = new QProcess(this);
+    m_accessProc->setProcessEnvironment(cleanChildEnvironment());
     connect(m_accessProc, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
         if (e == QProcess::FailedToStart) {
             appendLog(QStringLiteral("Error: 'pkexec' was not found (install 'polkit'). Add your user to the "

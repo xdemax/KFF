@@ -1,0 +1,8 @@
+[Desktop Entry]
+Type=Application
+Name=Karabas Flasher
+Comment=Firmware and core flasher for Karabas Go boards
+Exec=KarabasFlasher
+Icon=karabas-flasher
+Terminal=false
+Categories=Utility;Electronics;

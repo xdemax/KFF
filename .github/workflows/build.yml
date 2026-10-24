@@ -36,7 +36,12 @@ jobs:
         run: cmake --build build --parallel
 
       - name: Bundle Qt and create .dmg
-        run: macdeployqt build/KarabasFlasher.app -dmg
+        run: |
+          LIC=build/KarabasFlasher.app/Contents/Resources/licenses
+          mkdir -p "$LIC"
+          cp LICENSE THIRD_PARTY.md "$LIC/"
+          curl -fsSL --retry 3 https://www.gnu.org/licenses/lgpl-3.0.txt -o "$LIC/LGPL-3.0.txt"
+          macdeployqt build/KarabasFlasher.app -dmg
 
       - uses: actions/upload-artifact@v4
         with:
@@ -69,6 +74,8 @@ jobs:
         shell: pwsh
         run: |
           windeployqt build/Release/KarabasFlasher.exe
+          Copy-Item LICENSE, THIRD_PARTY.md -Destination build/Release/
+          Invoke-WebRequest -Uri https://www.gnu.org/licenses/lgpl-3.0.txt -OutFile build/Release/LGPL-3.0.txt
           Compress-Archive -Path build/Release/* -DestinationPath KarabasFlasher-windows.zip
 
       - uses: actions/upload-artifact@v4
@@ -77,8 +84,16 @@ jobs:
           path: KarabasFlasher-windows.zip
 
   linux:
-    name: Linux (compile check + binary)
-    runs-on: ubuntu-24.04
+    name: Linux .deb (${{ matrix.suffix }})
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-22.04
+            suffix: ubuntu22.04
+          - os: ubuntu-24.04
+            suffix: ubuntu24.04
     steps:
       - uses: actions/checkout@v4
         with:
@@ -87,7 +102,7 @@ jobs:
       - name: Install dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake qt6-base-dev qt6-serialport-dev libgl1-mesa-dev
+          sudo apt-get install -y cmake dpkg-dev qt6-base-dev qt6-serialport-dev libgl1-mesa-dev
 
       - name: Configure
         run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
@@ -95,22 +110,79 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
 
-      - name: Package
+      - name: Package .deb
         run: |
-          mkdir -p dist/KarabasFlasher
-          cp build/KarabasFlasher dist/KarabasFlasher/
-          cp packaging/70-karabas.rules docs/DEPENDENCIES_linux.txt README.md dist/KarabasFlasher/
-          tar -C dist -czf KarabasFlasher-linux-x86_64.tar.gz KarabasFlasher
+          cd build
+          cpack -G DEB
+          for f in karabas-flasher_*.deb; do mv "$f" "${f%.deb}_${{ matrix.suffix }}.deb"; done
+          ls -l *.deb
+          dpkg-deb -I karabas-flasher_*.deb | grep -E "Depends|Recommends"
 
       - uses: actions/upload-artifact@v4
         with:
-          name: KarabasFlasher-linux
-          path: KarabasFlasher-linux-x86_64.tar.gz
+          name: KarabasFlasher-linux-${{ matrix.suffix }}
+          path: build/karabas-flasher_*.deb
+
+  appimage:
+    name: Linux AppImage (Qt inside)
+    runs-on: ubuntu-22.04        # самая старая glibc из доступных - образ работает на большинстве систем
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install Qt
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: ${{ env.QT_VERSION }}
+          modules: qtserialport
+          cache: true
+
+      - name: Install system libraries for the Qt platform plugin
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y libgl1-mesa-dev libxkbcommon-x11-0 libxcb-cursor0 libxcb-icccm4 \
+            libxcb-image0 libxcb-keysyms1 libxcb-randr0 libxcb-render-util0 libxcb-shape0 \
+            libxcb-xinerama0 libxcb-xkb1 libfuse2
+
+      - name: Configure
+        run: cmake -S . -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_PREFIX=/usr
+
+      - name: Build
+        run: cmake --build build --parallel
+
+      - name: Install into AppDir
+        run: |
+          DESTDIR="$PWD/AppDir" cmake --install build
+          curl -fsSL --retry 3 https://www.gnu.org/licenses/lgpl-3.0.txt \
+            -o AppDir/usr/share/doc/karabas-flasher/LGPL-3.0.txt
+
+      - name: Build AppImage
+        env:
+          APPIMAGE_EXTRACT_AND_RUN: "1"
+        run: |
+          VER=$(grep -oP '^project\(.*VERSION \K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | head -1)
+          export VERSION="$VER"
+          export QMAKE="$QT_ROOT_DIR/bin/qmake"
+          wget -q https://github.com/linuxdeploy/linuxdeploy/releases/download/continuous/linuxdeploy-x86_64.AppImage
+          wget -q https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/continuous/linuxdeploy-plugin-qt-x86_64.AppImage
+          chmod +x linuxdeploy-*.AppImage
+          ./linuxdeploy-x86_64.AppImage --appdir AppDir --plugin qt \
+            -d AppDir/usr/share/applications/karabas-flasher.desktop \
+            -i AppDir/usr/share/icons/hicolor/scalable/apps/karabas-flasher.svg \
+            --output appimage
+          mv Karabas_Flasher-*.AppImage "KarabasFlasher-${VER}-x86_64.AppImage"
+          ls -l *.AppImage
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: KarabasFlasher-appimage
+          path: KarabasFlasher-*-x86_64.AppImage
 
   release:
     name: GitHub Release
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [macos, windows, linux]
+    needs: [macos, windows, linux, appimage]
     runs-on: ubuntu-24.04
     permissions:
       contents: write
@@ -137,7 +209,8 @@ jobs:
           mkdir release
           cp artifacts/KarabasFlasher-macos/KarabasFlasher.dmg "release/KarabasFlasher-${TAG}-macos.dmg"
           cp artifacts/KarabasFlasher-windows/KarabasFlasher-windows.zip "release/KarabasFlasher-${TAG}-windows.zip"
-          cp artifacts/KarabasFlasher-linux/KarabasFlasher-linux-x86_64.tar.gz "release/KarabasFlasher-${TAG}-linux-x86_64.tar.gz"
+          cp artifacts/KarabasFlasher-linux-*/*.deb release/
+          cp artifacts/KarabasFlasher-appimage/*.AppImage release/
           ls -l release
 
       - uses: softprops/action-gh-release@v2

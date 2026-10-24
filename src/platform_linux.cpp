@@ -1,4 +1,5 @@
 #include "Platform.h"
+#include "Util.h"
 
 #include <QDir>
 #include <QFile>
@@ -19,6 +20,7 @@ namespace {
 int runProcess(const QString& program, const QStringList& args, int timeoutMs,
                QString* out = nullptr, QString* err = nullptr) {
     QProcess p;
+    p.setProcessEnvironment(cleanChildEnvironment());
     p.start(program, args);
     if (!p.waitForStarted(3000)) return -1;
     if (!p.waitForFinished(timeoutMs)) {

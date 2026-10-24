@@ -1,4 +1,5 @@
 #pragma once
+#include <QProcessEnvironment>
 #include <QString>
 #include <QStringList>
 
@@ -10,6 +11,11 @@ QString workDir();
 
 // Полные пути файлов в папке dir с расширением ext (без учёта регистра).
 QStringList listFilesWithExt(const QString& dir, const QString& ext);
+
+// Окружение для запуска системных утилит (udisksctl, gdbus, pkexec...). Внутри AppImage
+// переменная LD_LIBRARY_PATH указывает на библиотеки из образа, и они могут сломать системные
+// программы, поэтому такие пути из неё убираются. Вне AppImage окружение не меняется.
+QProcessEnvironment cleanChildEnvironment();
 
 // Копирование с fsync: данные гарантированно записаны на носитель.
 bool copyFileSynced(const QString& src, const QString& dst, QString* err);

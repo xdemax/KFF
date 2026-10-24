@@ -10,6 +10,37 @@
 | Windows | `src/platform_windows.cpp`| логика перенесена из проверенной версии на WinAPI; в составе Qt-проекта не проверена |
 | macOS   | `src/platform_macos.cpp`  | написан без Mac, не проверен |
 
+## Установка на Ubuntu / Debian (.deb)
+
+Готовые пакеты лежат в разделе Releases на GitHub (для Ubuntu 22.04 и 24.04). `apt` сам доставит все
+зависимости (Qt 6, udisks2 и т.д.) и установит правило доступа к порту:
+
+    sudo apt install ./karabas-flasher_0.1.0_amd64_ubuntu24.04.deb
+
+Пакет нужно брать **под свою версию Ubuntu** (`lsb_release -rs`): Qt в 22.04 и 24.04 разных версий.
+Запуск: пункт «Karabas Flasher» в меню приложений или команда `KarabasFlasher`.
+Для остальных дистрибутивов - сборка из исходников (ниже).
+
+## Другие дистрибутивы
+
+**AppImage (любой дистрибутив).** В релизе есть один файл `KarabasFlasher-<версия>-x86_64.AppImage` с Qt внутри:
+
+    chmod +x KarabasFlasher-0.1.0-x86_64.AppImage
+    ./KarabasFlasher-0.1.0-x86_64.AppImage
+
+На некоторых системах нужен пакет `libfuse2` (иначе: `./KarabasFlasher-...AppImage --appimage-extract-and-run`).
+Системные части (udisks2, polkit, systemd) должны быть установлены - на обычном рабочем столе они уже есть.
+Правило доступа к порту AppImage в систему поставить не может: при ошибке «Доступ запрещён» программа сама
+предложит установить его через окно с паролем. Нативного Wayland в образе нет, окно работает через XWayland.
+
+**Arch / Manjaro (PKGBUILD).** Пакет собирается у вас из исходников, зависимости ставятся автоматически:
+
+    cd packaging/arch/git && makepkg -si          # последняя версия из git
+    cd packaging/arch/release && updpkgsums && makepkg -si    # версия по тегу vX.Y.Z
+
+Пакет ставит правило udev, пункт меню и иконку. Для сборки из git репозиторий на GitHub должен быть публичным.
+Файлы подходят и для публикации в AUR (нужна учётная запись на aur.archlinux.org).
+
 ## Сборка
 
 Нужны CMake, компилятор C++17 и Qt 6 с модулями Base и SerialPort.
@@ -51,6 +82,12 @@ Arch:   `sudo pacman -S base-devel cmake qt6-base qt6-serialport udisks2`
 
 Ключ `--log` включает запись лога в файл: `~/.local/share/KarabasFlasher/flasher_log.txt` (Linux),
 `%APPDATA%\KarabasFlasher\flasher_log.txt` (Windows), `~/Library/Application Support/KarabasFlasher/` (macOS).
+
+## Лицензия
+
+Код проекта распространяется по лицензии **MIT** (файл `LICENSE`). Программа использует Qt 6 по лицензии
+LGPL-3.0 (подключается динамически; подробности в `THIRD_PARTY.md`). Прошивки и ядра, которые программа
+скачивает с GitHub, принадлежат их авторам и в проект не входят.
 
 ## Версии и релизы
 
