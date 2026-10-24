@@ -32,6 +32,7 @@ QStringList listFilesWithExt(const QString& dir, const QString& ext) {
     QStringList out;
     const QFileInfoList list = QDir(dir).entryInfoList(QDir::Files | QDir::NoSymLinks, QDir::Name);
     for (const QFileInfo& fi : list) {
+        if (fi.fileName().startsWith(QLatin1String("._"))) continue;     // служебные файлы macOS, не ядра
         if (fi.fileName().endsWith(ext, Qt::CaseInsensitive)) out << fi.absoluteFilePath();
     }
     return out;

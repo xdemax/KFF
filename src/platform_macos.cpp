@@ -3,6 +3,8 @@
 #include "Platform.h"
 
 #include <QDir>
+#include <QFile>
+#include <QFileInfo>
 #include <QProcess>
 #include <QRegularExpression>
 #include <QStorageInfo>
@@ -161,6 +163,34 @@ bool ejectCandidate(const Candidate& c, QString* detail) {
         return false;
     }
     return true;
+}
+
+int cleanupVolumeJunk(const QString& mountPoint, const QStringList& extraDirs) {
+    int removed = 0;
+
+    // Файлы AppleDouble "._*" и .DS_Store - в корне и в указанных папках
+    auto cleanFiles = [&](const QString& dirPath) {
+        const QFileInfoList entries =
+            QDir(dirPath).entryInfoList(QDir::Files | QDir::Hidden | QDir::System | QDir::NoDotAndDotDot);
+        for (const QFileInfo& fi : entries) {
+            const QString n = fi.fileName();
+            if (n.startsWith(QStringLiteral("._")) || n == QLatin1String(".DS_Store")) {
+                if (QFile::remove(fi.absoluteFilePath())) ++removed;
+            }
+        }
+    };
+    cleanFiles(mountPoint);
+    for (const QString& d : extraDirs) cleanFiles(d);
+
+    // Служебные папки, которые macOS создаёт на съёмных томах (не трогаем .metadata_never_index:
+    // он запрещает индексацию Spotlight и тем самым не даёт появиться новому мусору)
+    static const QStringList junkDirs = { QStringLiteral(".Trashes"), QStringLiteral(".Spotlight-V100"),
+                                          QStringLiteral(".TemporaryItems"), QStringLiteral(".fseventsd") };
+    for (const QString& name : junkDirs) {
+        const QString path = mountPoint + QLatin1Char('/') + name;
+        if (QFileInfo(path).isDir() && QDir(path).removeRecursively()) ++removed;
+    }
+    return removed;
 }
 
 QString diagnostics() {

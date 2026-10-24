@@ -711,6 +711,16 @@ bool Worker::updateCoresOnSd(const ModelInfo& m, const QString& portLocation, co
 
     if (movedOld.isEmpty()) QDir().rmdir(backupDir);     // пустую папку бэкапа убираем
 
+    // Служебные файлы ОС (macOS: "._*") удаляем ДО извлечения карты
+    {
+        QStringList extraDirs;
+        if (QFileInfo(backupDir).isDir()) extraDirs << backupDir;
+        const int cleaned = Platform::cleanupVolumeJunk(root, extraDirs);
+        if (cleaned > 0) {
+            emit log("Removed " + QString::number(cleaned) + " system service files from the SD card.");
+        }
+    }
+
     emit log(QStringLiteral("Ejecting SD Card drive from system..."));
     if (!ejectBestEffort(sd)) {
         // Без eject Карабас не выйдет из режима MSC, порта не будет - ждать его бессмысленно

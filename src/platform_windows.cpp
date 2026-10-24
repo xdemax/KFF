@@ -130,6 +130,10 @@ bool ejectCandidate(const Candidate& c, QString* detail) {
     return true;
 }
 
+int cleanupVolumeJunk(const QString&, const QStringList&) {
+    return 0;       // Windows ничего не создаёт в корне тома при записи ядер
+}
+
 QString diagnostics() {
     QStringList lines;
     const QStringList roots = allRemovableRoots();

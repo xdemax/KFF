@@ -271,6 +271,10 @@ bool ejectCandidate(const Candidate& c, QString* detail) {
     return false;
 }
 
+int cleanupVolumeJunk(const QString&, const QStringList&) {
+    return 0;       // Linux не создаёт служебных файлов на vfat
+}
+
 QString diagnostics() {
     QStringList lines;
     const QStringList ids = allUsbDiskIds();
