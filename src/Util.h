@@ -17,5 +17,8 @@ QStringList listFilesWithExt(const QString& dir, const QString& ext);
 // программы, поэтому такие пути из неё убираются. Вне AppImage окружение не меняется.
 QProcessEnvironment cleanChildEnvironment();
 
+// Открыть папку в файловом менеджере системы (Проводник, Finder, xdg-open).
+bool openInFileManager(const QString& path);
+
 // Копирование с fsync: данные гарантированно записаны на носитель.
 bool copyFileSynced(const QString& src, const QString& dst, QString* err);

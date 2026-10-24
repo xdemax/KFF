@@ -40,6 +40,7 @@ signals:
     void firmwareReady(const QString& path);
     void finished();                                    // операция завершена (успешно или нет)
     void portAccessDenied(const QString& portLocation); // нет прав на порт (Linux)
+    void openFolder(const QString& path);               // открыть папку в файловом менеджере
 
 private:
     struct HttpResult {
@@ -72,6 +73,7 @@ private:
 
     void doDownload(const Params& p);
     void doFlash(const Params& p);
+    void doOpenSd(const Params& p);
 
     bool sendMscCommand(const QString& portLocation);
     bool resetPortToBootloader(const QString& portLocation);

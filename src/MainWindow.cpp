@@ -22,6 +22,9 @@
 #include <QSerialPortInfo>
 #include <QStandardPaths>
 #include <QThread>
+#include <QToolButton>
+#include <QToolTip>
+#include <QCursor>
 #include <QVBoxLayout>
 
 #include <algorithm>
@@ -66,10 +69,29 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     auto* row4 = new QHBoxLayout;
     m_flashBtn = new QPushButton(tr("FLASH!"));
     m_flashBtn->setMinimumHeight(40);
-    m_mscBtn = new QPushButton(tr("SD Mode (MSC)"));
+    m_mscBtn = new QPushButton(tr("Open SD card in explorer"));
     m_mscBtn->setMinimumHeight(40);
+
+    // Значок «?»: подсказка при наведении (и по щелчку - для тачпадов и macOS)
+    m_mscHelp = new QToolButton;
+    m_mscHelp->setText(QStringLiteral("?"));
+    m_mscHelp->setFixedSize(24, 24);
+    m_mscHelp->setCursor(Qt::WhatsThisCursor);
+    m_mscHelp->setFocusPolicy(Qt::NoFocus);
+    m_mscHelp->setStyleSheet(QStringLiteral(
+        "QToolButton { border: 1px solid palette(mid); border-radius: 12px; font-weight: bold; }"
+        "QToolButton:hover { background: palette(midlight); }"));
+    m_mscHelp->setToolTip(QStringLiteral(
+        "<p>This button switches the Karabas into USB card reader mode and lets you access the SD card "
+        "through your system's standard file manager. You can work with the files directly. "
+        "To leave this mode, you need to safely eject the memory card from your system.</p>"));
+    connect(m_mscHelp, &QToolButton::clicked, this, [this]() {
+        QToolTip::showText(QCursor::pos(), m_mscHelp->toolTip(), m_mscHelp);
+    });
+
     row4->addWidget(m_flashBtn, 2);
-    row4->addWidget(m_mscBtn, 1);
+    row4->addWidget(m_mscBtn, 2);
+    row4->addWidget(m_mscHelp, 0, Qt::AlignVCenter);
     root->addLayout(row4);
 
     m_log = new QPlainTextEdit;
@@ -88,6 +110,7 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     connect(m_worker, &Worker::firmwareReady, this, &MainWindow::onFirmwareReady);
     connect(m_worker, &Worker::finished, this, &MainWindow::onWorkerFinished);
     connect(m_worker, &Worker::portAccessDenied, this, &MainWindow::onPortAccessDenied);
+    connect(m_worker, &Worker::openFolder, this, &MainWindow::onOpenFolder);
     m_thread->start();
 
     connect(m_downloadBtn, &QPushButton::clicked, this, &MainWindow::onDownload);
@@ -223,9 +246,9 @@ void MainWindow::onRefreshPorts() {
 #if defined(Q_OS_MACOS)
         if (info.systemLocation().startsWith(QStringLiteral("/dev/tty."))) continue;   // оставляем /dev/cu.*
 #endif
-#if defined(Q_OS_LINUX)
-        if (!info.hasVendorIdentifier()) continue;       // встроенные /dev/ttyS* без USB не показываем
-#endif
+        // Только USB-устройства: у встроенных COM-портов, Bluetooth-портов и консоли отладки
+        // нет USB-идентификатора, а Карабас всегда его имеет.
+        if (!info.hasVendorIdentifier()) continue;
 #if defined(Q_OS_WIN)
         QString text = info.portName();                  // COM3
 #else
@@ -241,8 +264,17 @@ void MainWindow::onRefreshPorts() {
         appendLog("Found port: " + text);
         ++added;
     }
-    if (added == 0) appendLog(QStringLiteral("Error: Active serial ports not found."));
+    if (added == 0) {
+        appendLog(QStringLiteral("Error: Active serial ports not found. Connect the Karabas by USB "
+                                 "and press 'Refresh ports'."));
+    }
     m_comCombo->setCurrentIndex(added == 0 ? 0 : 1);
+}
+
+void MainWindow::onOpenFolder(const QString& path) {
+    if (!openInFileManager(path)) {
+        appendLog("Warning: Could not open the file manager automatically. Open the folder manually: " + path);
+    }
 }
 
 void MainWindow::onFirmwareReady(const QString& path) {

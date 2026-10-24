@@ -13,6 +13,7 @@ class QPlainTextEdit;
 class QProcess;
 class QPushButton;
 class QThread;
+class QToolButton;
 
 class MainWindow : public QWidget {
     Q_OBJECT
@@ -33,6 +34,7 @@ private slots:
     void onFirmwareReady(const QString& path);
     void onWorkerFinished();
     void onPortAccessDenied(const QString& portLocation);
+    void onOpenFolder(const QString& path);
 
 private:
     Params collectParams() const;
@@ -51,6 +53,7 @@ private:
     QPushButton* m_refreshBtn = nullptr;
     QPushButton* m_flashBtn = nullptr;
     QPushButton* m_mscBtn = nullptr;
+    QToolButton* m_mscHelp = nullptr;      // значок «?» с подсказкой про режим кард-ридера
     QPlainTextEdit* m_log = nullptr;
 
     QProcess* m_accessProc = nullptr;     // pkexec: установка правила udev

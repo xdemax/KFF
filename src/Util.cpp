@@ -1,9 +1,12 @@
 #include "Util.h"
 
+#include <QDesktopServices>
 #include <QDir>
 #include <QFile>
 #include <QFileInfo>
+#include <QProcess>
 #include <QStandardPaths>
+#include <QUrl>
 
 #if defined(Q_OS_UNIX)
 #include <cerrno>
@@ -51,6 +54,19 @@ QProcessEnvironment cleanChildEnvironment() {
         else env.insert(QStringLiteral("LD_LIBRARY_PATH"), keep.join(QLatin1Char(':')));
     }
     return env;
+}
+
+bool openInFileManager(const QString& path) {
+#if defined(Q_OS_LINUX)
+    // xdg-open запускается с чистым окружением: внутри AppImage LD_LIBRARY_PATH указывает
+    // на библиотеки образа, и файловый менеджер мог бы подхватить чужие версии.
+    QProcess p;
+    p.setProgram(QStringLiteral("xdg-open"));
+    p.setArguments(QStringList() << path);
+    p.setProcessEnvironment(cleanChildEnvironment());
+    if (p.startDetached()) return true;
+#endif
+    return QDesktopServices::openUrl(QUrl::fromLocalFile(path));
 }
 
 static void setErr(QString* e, const QString& m) {

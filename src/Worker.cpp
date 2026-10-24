@@ -77,14 +77,33 @@ bool Worker::pause(int ms) {
 void Worker::runDownload(const Params& p) { guarded([&]() { doDownload(p); }); }
 void Worker::runFlash(const Params& p) { guarded([&]() { doFlash(p); }); }
 
-void Worker::runMsc(const Params& p) {
-    guarded([&]() {
-        if (p.portLocation.isEmpty()) {
-            emit log(QStringLiteral("Error: Please select an active serial port first."));
-            return;
+void Worker::runMsc(const Params& p) { guarded([&]() { doOpenSd(p); }); }
+
+// Кнопка «Open SD card in explorer»: режим MSC, ожидание диска, открытие папки карты.
+void Worker::doOpenSd(const Params& p) {
+    if (p.portLocation.isEmpty()) {
+        emit log(QStringLiteral("Error: Please select an active serial port first."));
+        return;
+    }
+
+    const QSet<QString> before = Platform::readyRemovableDisks();   // снимок до команды
+    if (!sendMscCommand(p.portLocation)) return;
+
+    emit log(QStringLiteral("Waiting for the SD card to appear as a drive..."));
+    Platform::Candidate sd;
+    if (!waitForMountedVolume([&before]() { return Platform::newDisks(before); }, 40000, &sd)) {
+        if (m_cancel.load()) {
+            emit log(QStringLiteral("Operation cancelled by user."));
+        } else {
+            emit log(QStringLiteral("Error: SD card drive not detected after switching mode."));
+            emit log(Platform::diagnostics());
         }
-        sendMscCommand(p.portLocation);
-    });
+        return;
+    }
+
+    emit log("Success: The SD card is available at " + sd.mountPoint + " [" + sd.label + "]. Opening it in the file manager...");
+    emit openFolder(sd.mountPoint);
+    emit log(QStringLiteral("To leave this mode, safely eject the memory card from your system."));
 }
 
 // ----------------------------------------------------------------------------
