@@ -1,0 +1,4 @@
+#pragma once
+// Генерируется CMake (configure_file) из src/Version.h.in - вручную не править.
+#define APP_VERSION "@PROJECT_VERSION@"
+#define APP_GIT_DESCRIBE "@APP_GIT_DESCRIBE@"

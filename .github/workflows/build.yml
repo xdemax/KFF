@@ -2,6 +2,8 @@ name: Build
 
 on:
   push:
+    branches: ["**"]
+    tags: ["v*"]
   pull_request:
   workflow_dispatch:
 
@@ -17,6 +19,8 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0        # нужны теги для git describe
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -44,6 +48,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install Qt
         uses: jurplel/install-qt-action@v4
@@ -75,6 +81,8 @@ jobs:
     runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
       - name: Install dependencies
         run: |
@@ -87,7 +95,52 @@ jobs:
       - name: Build
         run: cmake --build build --parallel
 
+      - name: Package
+        run: |
+          mkdir -p dist/KarabasFlasher
+          cp build/KarabasFlasher dist/KarabasFlasher/
+          cp packaging/70-karabas.rules docs/DEPENDENCIES_linux.txt README.md dist/KarabasFlasher/
+          tar -C dist -czf KarabasFlasher-linux-x86_64.tar.gz KarabasFlasher
+
       - uses: actions/upload-artifact@v4
         with:
           name: KarabasFlasher-linux
-          path: build/KarabasFlasher
+          path: KarabasFlasher-linux-x86_64.tar.gz
+
+  release:
+    name: GitHub Release
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [macos, windows, linux]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check that the tag matches the CMake version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VER=$(grep -oP '^project\(.*VERSION \K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | head -1)
+          echo "tag=$TAG cmake=v$VER"
+          if [ "v$VER" != "$TAG" ]; then
+            echo "::error::Tag $TAG does not match the version v$VER in CMakeLists.txt"
+            exit 1
+          fi
+
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+
+      - name: Prepare release files
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          mkdir release
+          cp artifacts/KarabasFlasher-macos/KarabasFlasher.dmg "release/KarabasFlasher-${TAG}-macos.dmg"
+          cp artifacts/KarabasFlasher-windows/KarabasFlasher-windows.zip "release/KarabasFlasher-${TAG}-windows.zip"
+          cp artifacts/KarabasFlasher-linux/KarabasFlasher-linux-x86_64.tar.gz "release/KarabasFlasher-${TAG}-linux-x86_64.tar.gz"
+          ls -l release
+
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: release/*
+          generate_release_notes: true

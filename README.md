@@ -52,6 +52,27 @@ Arch:   `sudo pacman -S base-devel cmake qt6-base qt6-serialport udisks2`
 Ключ `--log` включает запись лога в файл: `~/.local/share/KarabasFlasher/flasher_log.txt` (Linux),
 `%APPDATA%\KarabasFlasher\flasher_log.txt` (Windows), `~/Library/Application Support/KarabasFlasher/` (macOS).
 
+## Версии и релизы
+
+Версия задаётся **в одном месте** - `project(KarabasFlasher VERSION X.Y.Z ...)` в `CMakeLists.txt`.
+Оттуда она попадает в заголовок окна, в журнал (вместе с описанием из git, например `v0.1.0-3-gabc1234`),
+в `--version` и в версию macOS-приложения. Схема `MAJOR.MINOR.PATCH`: исправление ошибки - PATCH,
+новая возможность - MINOR, несовместимое изменение - MAJOR. Пока Windows и macOS проверены не полностью,
+используются версии `0.x`; `1.0.0` - когда проверены все три системы.
+
+Как выпустить версию:
+
+    # 1. поднять версию в CMakeLists.txt (project(... VERSION 0.2.0 ...)) и дописать CHANGELOG.md
+    git add -A && git commit -m "Release 0.2.0"
+    git push
+    # 2. поставить тег (строго v + номер из CMakeLists.txt) и отправить его
+    git tag v0.2.0
+    git push origin v0.2.0
+
+По тегу Actions соберёт три системы и создаст релиз на GitHub с файлами `.dmg`, `.zip` и `.tar.gz`.
+Если тег не совпадает с версией в `CMakeLists.txt`, выпуск остановится с сообщением об ошибке.
+Описание из git считается при конфигурации CMake; при сборке из zip без git будет `no-git`.
+
 ## Автоматическая сборка (GitHub Actions)
 
 В `.github/workflows/build.yml` описана сборка под три системы. Положите проект в репозиторий на

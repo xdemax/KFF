@@ -1,0 +1,119 @@
+KARABAS FLASHER - ЗАВИСИМОСТИ ДЛЯ ЗАПУСКА НА LINUX
+==================================================
+
+Этот файл для пользователя, который запускает готовую программу
+(не собирает её из исходников).
+
+Программа проверена только на Manjaro (KDE). Названия пакетов для Ubuntu/Debian и Fedora
+составлены по справочным данным и на этих системах не проверялись; если пакет не нашёлся,
+ищите аналог по описанию из раздела "Что для чего".
+
+
+ЧТО ДЛЯ ЧЕГО
+------------
+Qt 6 (Core, Gui, Widgets, Network, SerialPort)   окно, сеть, последовательный порт
+udisks2 (udisksd, udisksctl)                      монтирование и извлечение SD-карты
+gdbus (пакет glib) или busctl (systemd)           вызов извлечения носителя (Drive.Eject)
+systemd-logind                                    выдача доступа к порту (тег uaccess)
+OpenSSL и ca-certificates                         HTTPS-загрузка прошивки и ядер с GitHub
+polkit + графический агент (pkexec)               окно запроса пароля при первой установке
+                                                  правила доступа к порту (желательно)
+eject                                             запасной способ извлечения (необязательно)
+Qt-плагин платформы: xcb или wayland              запуск окна, нужный плагин зависит от сессии
+
+Драйверы ядра (cdc_acm, usb-storage, vfat) в обычных дистрибутивах уже есть.
+На стандартном рабочем столе (KDE, GNOME, Xfce, Cinnamon) udisks2, polkit, glib, systemd и
+сертификаты обычно уже установлены. Чаще всего не хватает отдельного пакета Qt SerialPort.
+
+
+UBUNTU / DEBIAN / LINUX MINT
+----------------------------
+Обязательно:
+
+    sudo apt install libqt6widgets6 libqt6network6 libqt6serialport6 \
+                     udisks2 libglib2.0-bin ca-certificates libssl3
+
+Желательно:
+
+    sudo apt install pkexec libxcb-cursor0 eject
+
+Для родной сессии Wayland:
+
+    sudo apt install qt6-wayland
+
+Примечания:
+  - В старых версиях (до Ubuntu 22.04 / Debian 11) пакет pkexec называется policykit-1,
+    а вместо libssl3 нужен libssl1.1.
+  - Если при запуске пишет: could not load the Qt platform plugin "xcb" - проверьте libxcb-cursor0.
+
+
+FEDORA
+------
+Обязательно:
+
+    sudo dnf install qt6-qtbase-gui qt6-qtserialport udisks2 glib2 openssl-libs ca-certificates
+
+Желательно:
+
+    sudo dnf install polkit util-linux
+
+Для родной сессии Wayland:
+
+    sudo dnf install qt6-qtwayland
+
+(eject входит в util-linux.)
+
+
+ARCH / MANJARO / ENDEAVOUROS
+----------------------------
+Обязательно:
+
+    sudo pacman -S --needed qt6-base qt6-serialport udisks2 glib2 openssl ca-certificates
+
+Желательно:
+
+    sudo pacman -S --needed polkit util-linux
+
+Для родной сессии Wayland:
+
+    sudo pacman -S --needed qt6-wayland
+
+(eject входит в util-linux.)
+Группа для доступа к порту в Arch и Manjaro называется uucp (в остальных системах - dialout).
+
+
+ДОСТУП К ПОСЛЕДОВАТЕЛЬНОМУ ПОРТУ
+--------------------------------
+Вариант 1 (рекомендуется). При первой ошибке "Доступ запрещён" программа сама предложит
+установить правило udev; пароль администратора запросит polkit один раз. Файл правила:
+/etc/udev/rules.d/70-karabas-<VID>-<PID>.rules. Перелогин не нужен.
+
+Вариант 2. Если pkexec недоступен - поставьте правило вручную (для Карабаса VID:PID 2e8a:000a):
+
+    echo 'SUBSYSTEM=="tty", ATTRS{idVendor}=="2e8a", ATTRS{idProduct}=="000a", TAG+="uaccess", ENV{ID_MM_DEVICE_IGNORE}="1"' | sudo tee /etc/udev/rules.d/70-karabas-2e8a-000a.rules
+    sudo udevadm control --reload && sudo udevadm trigger --subsystem-match=tty --action=change
+
+Номер файла должен быть меньше 73, иначе тег uaccess не сработает.
+
+Вариант 3. Добавить себя в группу и перелогиниться:
+
+    sudo usermod -aG dialout $USER        (Arch и Manjaro: uucp)
+
+Если порт "занят", возможно, его опрашивает ModemManager. Правило из варианта 1 или 2 уже
+исключает устройство из его обработки (ID_MM_DEVICE_IGNORE).
+
+
+БЫСТРАЯ ПРОВЕРКА, ЧТО ВСЁ УСТАНОВЛЕНО
+-------------------------------------
+    command -v udisksctl gdbus busctl pkexec eject
+    systemctl status udisks2 --no-pager | head -3
+    loginctl show-session $XDG_SESSION_ID -p Active
+
+Нужны: udisksctl; хотя бы одна из gdbus или busctl; служба udisks2 запущена (active или
+запускается по требованию); сессия Active=yes. pkexec и eject необязательны.
+
+
+WINDOWS И MACOS
+---------------
+Ничего дополнительно ставить не нужно: библиотеки Qt входят в готовую сборку
+(папка с DLL на Windows, приложение .app внутри .dmg на macOS).

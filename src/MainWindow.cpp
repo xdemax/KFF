@@ -3,6 +3,7 @@
 #include "Models.h"
 #include "Uf2.h"
 #include "Util.h"
+#include "Version.h"
 
 #include <QCheckBox>
 #include <QCloseEvent>
@@ -26,7 +27,7 @@
 #include <algorithm>
 
 MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_fileLogging(fileLogging) {
-    setWindowTitle(QStringLiteral("Karabas Go Family Firmware Flasher"));
+    setWindowTitle(QStringLiteral("Karabas Go Family Firmware Flasher v") + QString::fromLatin1(APP_VERSION));
 
     auto* root = new QVBoxLayout(this);
 
@@ -96,6 +97,8 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     connect(m_mscBtn, &QPushButton::clicked, this, &MainWindow::onMsc);
 
     if (m_fileLogging) openLogFile();
+    appendLog(QStringLiteral("Karabas Flasher v") + QString::fromLatin1(APP_VERSION) + QStringLiteral(" (") +
+              QString::fromLatin1(APP_GIT_DESCRIBE) + QLatin1Char(')'));
     onRefreshPorts();
     appendLog(QStringLiteral("Application is ready."));
 }
