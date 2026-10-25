@@ -43,9 +43,15 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     row1->addWidget(m_downloadBtn);
     root->addLayout(row1);
 
-    m_coresChk = new QCheckBox(tr("Update core too"));
+    m_fwChk = new QCheckBox(tr("Update firmware"));
+    m_fwChk->setChecked(true);
+    m_fwChk->setToolTip(tr("Download and flash the RP2040 firmware of the board."));
+    m_coresChk = new QCheckBox(tr("Update cores"));
+    m_coresChk->setToolTip(tr("Download the FPGA cores and replace them on the SD card. "
+                              "The old cores are saved to a backup folder on the card."));
     m_delTempChk = new QCheckBox(tr("Delete temp files on exit"));
     m_delTempChk->setChecked(true);
+    root->addWidget(m_fwChk);
     root->addWidget(m_coresChk);
     root->addWidget(m_delTempChk);
 
@@ -114,11 +120,13 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     m_thread->start();
 
     connect(m_downloadBtn, &QPushButton::clicked, this, &MainWindow::onDownload);
+    connect(m_fwChk, &QCheckBox::toggled, this, &MainWindow::applyOptionState);
     connect(m_browseBtn, &QPushButton::clicked, this, &MainWindow::onBrowse);
     connect(m_refreshBtn, &QPushButton::clicked, this, &MainWindow::onRefreshPorts);
     connect(m_flashBtn, &QPushButton::clicked, this, &MainWindow::onFlash);
     connect(m_mscBtn, &QPushButton::clicked, this, &MainWindow::onMsc);
 
+    applyOptionState();
     if (m_fileLogging) openLogFile();
     appendLog(QStringLiteral("Karabas Flasher v") + QString::fromLatin1(APP_VERSION) + QStringLiteral(" (") +
               QString::fromLatin1(APP_GIT_DESCRIBE) + QLatin1Char(')'));
@@ -174,6 +182,7 @@ void MainWindow::appendLog(const QString& message) {
 Params MainWindow::collectParams() const {
     Params p;
     p.modelIndex = m_modelCombo->currentIndex();
+    p.updateFirmware = m_fwChk->isChecked();
     p.updateCores = m_coresChk->isChecked();
     p.portLocation = m_comCombo->currentData().toString();
     p.firmwarePath = m_firmwarePath;
@@ -184,13 +193,20 @@ void MainWindow::setBusy(bool busy) {
     m_busy = busy;
     const bool en = !busy;
     for (QWidget* w : {static_cast<QWidget*>(m_modelCombo), static_cast<QWidget*>(m_downloadBtn),
-                       static_cast<QWidget*>(m_coresChk), static_cast<QWidget*>(m_delTempChk),
+                       static_cast<QWidget*>(m_fwChk), static_cast<QWidget*>(m_coresChk), static_cast<QWidget*>(m_delTempChk),
                        static_cast<QWidget*>(m_browseBtn), static_cast<QWidget*>(m_comCombo),
                        static_cast<QWidget*>(m_refreshBtn), static_cast<QWidget*>(m_flashBtn),
                        static_cast<QWidget*>(m_mscBtn)}) {
         w->setEnabled(en);
     }
     if (en) m_downloadBtn->setText(tr("Download via GitHub"));
+    applyOptionState();
+}
+
+void MainWindow::applyOptionState() {
+    const bool fw = m_fwChk->isChecked();
+    m_pathEdit->setEnabled(fw);
+    m_browseBtn->setEnabled(!m_busy && fw);
 }
 
 // ----------------------------------------------------------------------------

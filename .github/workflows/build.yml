@@ -40,7 +40,8 @@ jobs:
           LIC=build/KarabasFlasher.app/Contents/Resources/licenses
           mkdir -p "$LIC"
           cp LICENSE THIRD_PARTY.md "$LIC/"
-          curl -fsSL --retry 3 https://www.gnu.org/licenses/lgpl-3.0.txt -o "$LIC/LGPL-3.0.txt"
+          curl -fsSL --connect-timeout 15 --max-time 60 --retry 2 https://www.gnu.org/licenses/lgpl-3.0.txt -o "$LIC/LGPL-3.0.txt" \
+            || curl -fsSL --connect-timeout 15 --max-time 60 --retry 2 https://raw.githubusercontent.com/spdx/license-list-data/main/text/LGPL-3.0-only.txt -o "$LIC/LGPL-3.0.txt"
           macdeployqt build/KarabasFlasher.app -dmg
 
       - uses: actions/upload-artifact@v4
@@ -75,7 +76,12 @@ jobs:
         run: |
           windeployqt build/Release/KarabasFlasher.exe
           Copy-Item LICENSE, THIRD_PARTY.md -Destination build/Release/
-          Invoke-WebRequest -Uri https://www.gnu.org/licenses/lgpl-3.0.txt -OutFile build/Release/LGPL-3.0.txt
+          try {
+            Invoke-WebRequest -Uri https://www.gnu.org/licenses/lgpl-3.0.txt -OutFile build/Release/LGPL-3.0.txt -TimeoutSec 30
+          } catch {
+            Write-Host "gnu.org is unavailable, using the SPDX copy of the license text"
+            Invoke-WebRequest -Uri https://raw.githubusercontent.com/spdx/license-list-data/main/text/LGPL-3.0-only.txt -OutFile build/Release/LGPL-3.0.txt -TimeoutSec 60
+          }
           Compress-Archive -Path build/Release/* -DestinationPath KarabasFlasher-windows.zip
 
       - uses: actions/upload-artifact@v4
@@ -152,7 +158,9 @@ jobs:
       - name: Install into AppDir
         run: |
           DESTDIR="$PWD/AppDir" cmake --install build
-          curl -fsSL --retry 3 https://www.gnu.org/licenses/lgpl-3.0.txt \
+          curl -fsSL --connect-timeout 15 --max-time 60 --retry 2 https://www.gnu.org/licenses/lgpl-3.0.txt \
+            -o AppDir/usr/share/doc/karabas-flasher/LGPL-3.0.txt \
+            || curl -fsSL --connect-timeout 15 --max-time 60 --retry 2 https://raw.githubusercontent.com/spdx/license-list-data/main/text/LGPL-3.0-only.txt \
             -o AppDir/usr/share/doc/karabas-flasher/LGPL-3.0.txt
 
       - name: Build AppImage

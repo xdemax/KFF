@@ -377,6 +377,11 @@ void Worker::doDownload(const Params& p) {
     }
     const ModelInfo& m = models().at(p.modelIndex);
 
+    if (!p.updateFirmware && !p.updateCores) {
+        emit log(QStringLiteral("Nothing to download: check 'Update firmware' and/or 'Update cores'."));
+        return;
+    }
+
     const QString wd = workDir();
     if (!QDir().mkpath(wd)) {
         emit log("Error: Cannot create working directory: " + wd);
@@ -386,27 +391,31 @@ void Worker::doDownload(const Params& p) {
     const QString coresDir = wd + QStringLiteral("/cores");
 
     emit log("Starting download for model: " + m.name);
-    emit log("URL: " + m.firmwareUrl);
+    if (p.updateFirmware) {
+        emit log("URL: " + m.firmwareUrl);
 
-    QString err;
-    QElapsedTimer fwTimer;
-    fwTimer.start();
-    if (!downloadToFile(QUrl(m.firmwareUrl), destFile, &err)) {
-        emit log(m_cancel.load() ? QStringLiteral("Download cancelled.") : "Download error: " + err);
-        return;
+        QString err;
+        QElapsedTimer fwTimer;
+        fwTimer.start();
+        if (!downloadToFile(QUrl(m.firmwareUrl), destFile, &err)) {
+            emit log(m_cancel.load() ? QStringLiteral("Download cancelled.") : "Download error: " + err);
+            return;
+        }
+        QString why;
+        if (!isValidUf2(destFile, &why)) {
+            emit log("Error: Downloaded file is not a valid UF2 image (" + why + "). It was discarded.");
+            QFile::remove(destFile);
+            return;
+        }
+        emit firmwareReady(destFile);
+        emit log("Successfully downloaded firmware (" + QString::number(QFileInfo(destFile).size() / 1024) + " KB, " +
+                 QString::number(fwTimer.elapsed() / 1000.0, 'f', 1) + " s). Path: " + destFile);
+    } else {
+        emit log(QStringLiteral("Skipping firmware download because 'Update firmware' is unchecked."));
     }
-    QString why;
-    if (!isValidUf2(destFile, &why)) {
-        emit log("Error: Downloaded file is not a valid UF2 image (" + why + "). It was discarded.");
-        QFile::remove(destFile);
-        return;
-    }
-    emit firmwareReady(destFile);
-    emit log("Successfully downloaded firmware (" + QString::number(QFileInfo(destFile).size() / 1024) + " KB, " +
-             QString::number(fwTimer.elapsed() / 1000.0, 'f', 1) + " s). Path: " + destFile);
 
     if (!p.updateCores) {
-        emit log(QStringLiteral("Skipping cores download because checkbox is unchecked."));
+        emit log(QStringLiteral("Skipping cores download because 'Update cores' is unchecked."));
         return;
     }
 
@@ -469,10 +478,10 @@ void Worker::doDownload(const Params& p) {
         QFile marker(coresDir + "/" + kCoresCompleteMarker);
         if (!marker.open(QIODevice::WriteOnly)) {
             emit log("Warning: Could not create the completion marker (" + marker.errorString() +
-                     "). Flashing with 'Update core too' will be refused.");
+                     "). Flashing with 'Update cores' will be refused.");
         }
     } else {
-        emit log(QStringLiteral("Warning: Cores set is incomplete. Flashing with 'Update core too' will be "
+        emit log(QStringLiteral("Warning: Cores set is incomplete. Flashing with 'Update cores' will be "
                                 "refused until all cores download."));
     }
 }
@@ -745,7 +754,7 @@ bool Worker::updateCoresOnSd(const ModelInfo& m, const QString& portLocation, co
         // Без eject Карабас не выйдет из режима MSC, порта не будет - ждать его бессмысленно
         emit log(QStringLiteral("Error: The SD card could not be ejected, so the device cannot leave MSC mode by "
                                 "itself. The new cores are already on the card. Replug the Karabas (unplug and plug "
-                                "the USB cable), then press FLASH again with 'Update core too' unchecked to finish "
+                                "the USB cable), then press FLASH again with only 'Update firmware' checked to finish "
                                 "flashing the firmware."));
         return false;
     }
@@ -757,11 +766,15 @@ bool Worker::updateCoresOnSd(const ModelInfo& m, const QString& portLocation, co
 // ----------------------------------------------------------------------------
 void Worker::doFlash(const Params& p) {
     // --- Предварительные проверки: ДО любых действий с SD-картой и устройством ---
-    if (p.firmwarePath.isEmpty()) {
-        emit log(QStringLiteral("Error: Firmware file not selected."));
+    if (!p.updateFirmware && !p.updateCores) {
+        emit log(QStringLiteral("Error: Nothing to do. Check 'Update firmware' and/or 'Update cores'."));
         return;
     }
-    {
+    if (p.updateFirmware) {
+        if (p.firmwarePath.isEmpty()) {
+            emit log(QStringLiteral("Error: Firmware file not selected."));
+            return;
+        }
         QString why;
         if (!isValidUf2(p.firmwarePath, &why)) {
             emit log("Error: Firmware file is not usable: " + why);
@@ -781,7 +794,7 @@ void Worker::doFlash(const Params& p) {
         }
         const QString coresDir = workDir() + QStringLiteral("/cores");
         if (!QFile::exists(coresDir + "/" + kCoresCompleteMarker)) {
-            emit log(QStringLiteral("Error: No complete set of downloaded cores found. Check 'Update core too' and "
+            emit log(QStringLiteral("Error: No complete set of downloaded cores found. Check 'Update cores' and "
                                     "press 'Download via GitHub' first."));
             return;
         }
@@ -802,6 +815,16 @@ void Worker::doFlash(const Params& p) {
                 return;
             }
             portFound = isPortPresent(p.portLocation);
+        }
+        if (!p.updateFirmware) {
+            // Только ядра: после извлечения карты плата сама вернулась в обычный режим
+            if (portFound) {
+                emit log(QStringLiteral("Process completed successfully. The cores are updated and the device is back in normal mode."));
+            } else {
+                emit log(QStringLiteral("Warning: The cores are updated, but the device port was not detected again. "
+                                        "Replug the device if it does not respond."));
+            }
+            return;
         }
         if (portFound) {
             emit log("Port " + p.portLocation + " is back online.");

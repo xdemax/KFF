@@ -39,12 +39,14 @@ private slots:
 private:
     Params collectParams() const;
     void setBusy(bool busy);
+    void applyOptionState();            // доступность поля прошивки зависит от галки Update firmware
     void openLogFile();
     void cleanupTemp();
     void stopThread();
 
     QComboBox* m_modelCombo = nullptr;
     QPushButton* m_downloadBtn = nullptr;
+    QCheckBox* m_fwChk = nullptr;
     QCheckBox* m_coresChk = nullptr;
     QCheckBox* m_delTempChk = nullptr;
     QLineEdit* m_pathEdit = nullptr;

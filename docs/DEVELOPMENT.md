@@ -1,0 +1,171 @@
+# Karabas Flasher: информация для разработчиков
+
+Сборка из исходников, установка зависимостей, пакеты, релизы и устройство проекта. Описание для пользователей - в [README.md](../README.md).
+
+Одна кодовая база на Qt6 для Linux, Windows и macOS. Общий код (интерфейс, сеть, логика прошивки)
+одинаков везде; всё, что зависит от ОС при работе с дисками, вынесено в `src/Platform.h`
+и реализовано отдельно для каждой системы:
+
+| ОС      | Файл                      | Статус |
+|---------|---------------------------|--------|
+| Linux   | `src/platform_linux.cpp`  | написан, не проверен на железе |
+| Windows | `src/platform_windows.cpp`| логика перенесена из проверенной версии на WinAPI; в составе Qt-проекта не проверена |
+| macOS   | `src/platform_macos.cpp`  | написан без Mac, не проверен |
+
+## Установка на Ubuntu / Debian (.deb)
+
+Готовый пакет лежит в разделе Releases на GitHub (для Ubuntu 24.04 и новее). `apt` сам доставит все
+зависимости (Qt 6, udisks2 и т.д.) и установит правило доступа к порту:
+
+    sudo apt install ./karabas-flasher_0.1.0_amd64_ubuntu24.04.deb
+
+**Ubuntu 22.04 и старше:** в их репозиториях нет Qt SerialPort (`libqt6serialport6`), поэтому `.deb` не подойдёт - 
+используйте AppImage (Qt внутри). На Debian 12 `.deb` не проверялся: он собран на Ubuntu 24.04 и может требовать более новую glibc.
+Запуск: пункт «Karabas Flasher» в меню приложений или команда `KarabasFlasher`.
+Для остальных дистрибутивов - сборка из исходников (ниже).
+
+## Другие дистрибутивы
+
+**AppImage (любой дистрибутив).** В релизе есть один файл `KarabasFlasher-<версия>-x86_64.AppImage` с Qt внутри:
+
+    chmod +x KarabasFlasher-0.1.0-x86_64.AppImage
+    ./KarabasFlasher-0.1.0-x86_64.AppImage
+
+На некоторых системах нужен пакет `libfuse2` (иначе: `./KarabasFlasher-...AppImage --appimage-extract-and-run`).
+Системные части (udisks2, polkit, systemd) должны быть установлены - на обычном рабочем столе они уже есть.
+Правило доступа к порту AppImage в систему поставить не может: при ошибке «Доступ запрещён» программа сама
+предложит установить его через окно с паролем. Нативного Wayland в образе нет, окно работает через XWayland.
+
+**Arch / Manjaro (PKGBUILD).** Пакет собирается у вас из исходников, зависимости ставятся автоматически:
+
+    cd packaging/arch/git && makepkg -si          # последняя версия из git
+    cd packaging/arch/release && updpkgsums && makepkg -si    # версия по тегу vX.Y.Z
+
+Пакет ставит правило udev, пункт меню и иконку. Для сборки из git репозиторий на GitHub должен быть публичным.
+Файлы подходят и для публикации в AUR (нужна учётная запись на aur.archlinux.org).
+
+## Сборка
+
+Нужны CMake, компилятор C++17 и Qt 6 с модулями Base и SerialPort.
+
+### Linux
+
+Debian / Ubuntu:
+
+    sudo apt install build-essential cmake qt6-base-dev qt6-serialport-dev udisks2 eject
+
+Fedora: `sudo dnf install gcc-c++ cmake qt6-qtbase-devel qt6-qtserialport-devel udisks2`
+Arch:   `sudo pacman -S base-devel cmake qt6-base qt6-serialport udisks2`
+
+    cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+    cmake --build build -j
+    ./build/KarabasFlasher --log
+
+### Windows
+
+Установите Qt 6 (комплект MSVC или MinGW) и откройте `CMakeLists.txt` в Qt Creator, либо:
+
+    cmake -S . -B build -DCMAKE_PREFIX_PATH=C:/Qt/6.x.x/<kit>
+    cmake --build build --config Release
+
+Для раздачи соберите папку с DLL: `windeployqt build\Release\KarabasFlasher.exe`.
+Без подписи кода SmartScreen может показать предупреждение.
+
+### macOS
+
+    brew install cmake qt
+    cmake -S . -B build -DCMAKE_PREFIX_PATH="$(brew --prefix qt)" -DCMAKE_BUILD_TYPE=Release
+    cmake --build build -j
+
+Упаковка: `macdeployqt build/KarabasFlasher.app -dmg`. Homebrew-Qt собран под одну архитектуру,
+поэтому бинарник будет для вашего процессора (arm64 или Intel). Универсальная сборка требует
+универсального Qt. Без подписи и нотаризации Gatekeeper блокирует первый запуск: откройте
+приложение через «Системные настройки - Конфиденциальность и безопасность - Всё равно открыть».
+Начиная с macOS Ventura система может запросить доступ к съёмным томам.
+
+Ключ `--log` включает запись лога в файл: `~/.local/share/KarabasFlasher/flasher_log.txt` (Linux),
+`%APPDATA%\KarabasFlasher\flasher_log.txt` (Windows), `~/Library/Application Support/KarabasFlasher/` (macOS).
+
+## Лицензия
+
+Код проекта распространяется по лицензии **MIT** (файл `LICENSE`). Программа использует Qt 6 по лицензии
+LGPL-3.0 (подключается динамически; подробности в `THIRD_PARTY.md`). Прошивки и ядра, которые программа
+скачивает с GitHub, принадлежат их авторам и в проект не входят.
+
+## Версии и релизы
+
+Версия задаётся **в одном месте** - `project(KarabasFlasher VERSION X.Y.Z ...)` в `CMakeLists.txt`.
+Оттуда она попадает в заголовок окна, в журнал (вместе с описанием из git, например `v0.1.0-3-gabc1234`),
+в `--version` и в версию macOS-приложения. Схема `MAJOR.MINOR.PATCH`: исправление ошибки - PATCH,
+новая возможность - MINOR, несовместимое изменение - MAJOR. Пока Windows и macOS проверены не полностью,
+используются версии `0.x`; `1.0.0` - когда проверены все три системы.
+
+Как выпустить версию:
+
+    # 1. поднять версию в CMakeLists.txt (project(... VERSION 0.2.0 ...)) и дописать CHANGELOG.md
+    git add -A && git commit -m "Release 0.2.0"
+    git push
+    # 2. поставить тег (строго v + номер из CMakeLists.txt) и отправить его
+    git tag v0.2.0
+    git push origin v0.2.0
+
+По тегу Actions соберёт три системы и создаст релиз на GitHub с файлами `.dmg`, `.zip` и `.tar.gz`.
+Если тег не совпадает с версией в `CMakeLists.txt`, выпуск остановится с сообщением об ошибке.
+Описание из git считается при конфигурации CMake; при сборке из zip без git будет `no-git`.
+
+## Автоматическая сборка (GitHub Actions)
+
+В `.github/workflows/build.yml` описана сборка под три системы. Положите проект в репозиторий на
+GitHub (`git init && git add . && git commit -m init && git push`), откройте вкладку **Actions** -
+сборка запустится сама. Готовые файлы лежат в разделе **Artifacts** завершённого запуска:
+`KarabasFlasher-macos` (.dmg, universal arm64 + Intel), `KarabasFlasher-windows` (zip с DLL Qt),
+`KarabasFlasher-linux` (бинарник; нужен системный Qt). Заодно это проверка компиляции на всех системах.
+
+Сборки не подписаны. На macOS скачанный из браузера `.dmg` получает карантин: после перетаскивания в
+«Программы» выполните `xattr -dr com.apple.quarantine /Applications/KarabasFlasher.app`
+или откройте приложение через «Всё равно открыть» в настройках безопасности.
+
+## Настройка системы
+
+### Linux
+
+1. **Доступ к порту.** При ошибке «Доступ запрещён» программа сама предложит установить правило
+   udev (`TAG+="uaccess"`) для вашего устройства; пароль администратора запросит polkit (`pkexec`)
+   один раз, перелогин не нужен. Если `pkexec` недоступен - добавьте себя в группу `dialout`
+   (в Arch и Manjaro - `uucp`) и перелогиньтесь:
+
+       sudo usermod -aG dialout $USER
+
+   При установке из пакета правило `packaging/70-karabas.rules` ставится в `lib/udev/rules.d`
+   автоматически (`cmake --install`), и пароль не нужен вообще.
+
+2. **ModemManager** может опрашивать `/dev/ttyACM*` AT-командами и мешать. Найдите VID:PID (`lsusb`)
+   и создайте `/etc/udev/rules.d/70-karabas.rules`:
+
+       ATTRS{idVendor}=="XXXX", ATTRS{idProduct}=="YYYY", ENV{ID_MM_DEVICE_IGNORE}="1"
+
+   затем `sudo udevadm control --reload && sudo udevadm trigger`.
+
+3. **udisks2** нужен для монтирования и извлечения SD-карты (`udisksctl` и `gdbus`/`busctl`).
+   Извлечение выполняется D-Bus-вызовом udisks `Drive.Eject` (SCSI-eject с правами системы),
+   запасной вариант - утилита `eject`. `udisksctl power-off` не используется: он отключает
+   питание USB-порта, и Карабас не возвращается в обычный режим.
+
+### Windows и macOS
+
+Дополнительная настройка не нужна: драйвер CDC в Windows 10 и новее встроенный, на macOS порт
+виден как `/dev/cu.usbmodem*`.
+
+## Как программа находит диск
+
+Диск не ищется по букве, пути или метке. Перед командой MSC делается снимок съёмных дисков с
+готовым носителем, а SD - это диск, у которого носитель появился после команды. Загрузчик
+RP2040 ищется по метке `RPI-RP2`. Если подходящих дисков несколько, программа останавливается
+с сообщением, а не угадывает.
+
+## Что не проверено на железе
+
+Наиболее вероятные места расхождений: на Linux - определение SD по `/sys/block`, монтирование
+через udisksctl, извлечение (`eject` / `power-off`) и возврат Карабаса в режим CDC после него;
+на всех системах - сброс 1200 bps через QSerialPort; на macOS - весь платформенный слой.
+При проблемах запустите с `--log` и пришлите файл лога.

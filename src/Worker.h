@@ -17,7 +17,8 @@ class QSaveFile;
 
 struct Params {
     int modelIndex = -1;
-    bool updateCores = false;
+    bool updateFirmware = true;     // скачать/прошить прошивку RP2040
+    bool updateCores = false;       // скачать/заменить ядра на SD-карте
     QString portLocation;       // например /dev/ttyACM0; пусто = пропустить сброс
     QString firmwarePath;
 };
