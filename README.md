@@ -1,5 +1,11 @@
 # Karabas Flasher
 
+[Русский](#русский) | [English](#english)
+
+---
+
+## Русский
+
 Программа для обновления **прошивки** и **ядер** плат семейства Karabas Go. Работает в Windows, Linux и macOS.
 
 Раньше для обновления нужно было вручную скачать файлы с GitHub, перевести плату в режим загрузчика,
@@ -94,3 +100,105 @@
 
 Код распространяется по лицензии **MIT** (файл `LICENSE`). Программа использует Qt 6 по лицензии LGPL-3.0
 (подробности в `THIRD_PARTY.md`). Прошивки и ядра, которые программа скачивает, принадлежат их авторам и в проект не входят.
+
+---
+
+## English
+
+[Русский](#русский) | [English](#english)
+
+A tool for updating the **firmware** and **cores** of Karabas Go family boards. Runs on Windows, Linux and macOS.
+
+Previously, updating required manually downloading files from GitHub, putting the board into bootloader mode,
+copying the firmware and replacing cores on the SD card. Karabas Flasher does all of this in a single window.
+
+**Supported boards:** Karabas Go, Karabas Go Mini rev A-F, Karabas Go Mini rev G.
+
+### What the program does
+
+- **Downloads** the latest firmware and cores from the board author's GitHub repositories.
+- **Updates the board firmware** (RP2040 microcontroller).
+- **Replaces cores** (`.kg1`, `.kg2`, `.kg3` files) on the board's SD card. Old cores are not deleted but moved to a backup folder.
+- **Opens the board's SD card** as a regular drive so you can work with its files directly.
+
+Firmware and cores can be updated together or separately — for example, cores only.
+
+### How to use
+
+1. Connect the Karabas to your computer with a USB cable.
+2. Select your model in the **Select Device Model** list.
+3. Check what you want to update:
+   - **Update firmware**: board firmware (enabled by default);
+   - **Update cores**: cores on the SD card.
+
+   You can check both or just one.
+4. Click **Download via GitHub**. The program downloads everything that is checked. There are many cores, and the speed
+   depends on your internet connection; progress is shown in the log at the bottom of the window.
+5. In the **Serial port** list, select the board's port. Only USB devices are shown; the required port appears
+   when the board is connected (if it is missing, click **Refresh ports**). The "(not selected - flash without reset)"
+   item is only needed if the board has already been put into bootloader mode manually.
+6. Click **FLASH!** and wait for the "Process completed successfully" line in the log.
+
+Do not disconnect the board or close the window while an operation is in progress. If you do close the window,
+the program will ask for confirmation and stop at a safe point.
+
+### Working with the SD card manually
+
+The **Open SD card in explorer** button switches the board into USB card reader mode: the SD card appears in the system
+as a regular drive, and the program opens it in the file manager. The **"?"** icon next to the button shows a hint.
+To leave this mode, safely eject the card using your system's tools.
+
+### What happens under the hood
+
+**Firmware update.** The program sends a special signal to the board's port (a connection at 1200 baud), after which the
+RP2040 reboots into bootloader mode and appears in the system as an `RPI-RP2` drive. The program copies the firmware file
+to it, and the board reboots with the new firmware.
+
+**Cores update.** The program switches the board into card reader mode, finds the SD card drive that appears, creates a
+`backup_YYYY-MM-DD_HH-MM-SS` folder on it, moves the old cores of the selected model there, and then copies the new ones.
+After that, the card is safely ejected from the system, and the board returns to normal mode. If something goes wrong at
+any step, the changes are rolled back: the old cores are restored.
+
+**Checks.** Before writing, the program verifies that the firmware file is really a UF2 image, that a complete set of
+cores has been downloaded, and that the drive found is the board's drive and not another flash drive. If several
+suitable drives are connected to the computer, the program stops and asks you to leave only the board.
+
+### Installation
+
+Ready-made builds are available on the [Releases](https://github.com/xdemax/kgff/releases) page.
+
+| System | What to download | How to run |
+|---|---|---|
+| **Windows** | `…-windows.zip` archive | Unpack and run `KarabasFlasher.exe`. If Windows shows a SmartScreen warning, click "More info" and "Run anyway" (the build is not signed) |
+| **macOS** | `…-macos.dmg` image | Drag the app to "Applications". On first launch, the system may block the unsigned app: open "System Settings", "Privacy & Security", "Open Anyway". Alternatively, run `xattr -dr com.apple.quarantine /Applications/KarabasFlasher.app` in the terminal. Allow access to removable volumes when the system asks |
+| **Ubuntu 24.04 and newer** | `…ubuntu24.04.deb` package | `sudo apt install ./file-name.deb`: dependencies are installed automatically |
+| **Other Linux** (including Ubuntu 22.04) | `…AppImage` | `chmod +x file.AppImage` and run. If it does not start, install the `libfuse2` package |
+| **Arch / Manjaro** | sources from the repository | `cd packaging/arch/git && makepkg -si` |
+
+**Linux: port access.** On first connection, the program may report that it has no permission to access the board's port
+and offer to install an access rule. Confirm: the system will ask for the administrator password once. Installing from
+`.deb` or `PKGBUILD` installs this rule automatically.
+
+On Linux, udisks2 and polkit must be present (they are already installed on a typical desktop).
+Package details: [docs/DEPENDENCIES_linux.txt](docs/DEPENDENCIES_linux.txt).
+
+### Troubleshooting
+
+- **The board's port is not in the list.** Check the cable (a data cable is required, not just a charging one) and click **Refresh ports**.
+- **Linux: "Access denied" to the port.** Agree to install the access rule (see above) or add yourself to the `dialout`
+  group (in Arch and Manjaro `uucp`) and log in again.
+- **The SD card or `RPI-RP2` drive is not found.** Wait a few seconds and try again. Disconnect extra flash drives and cards
+  and make sure the system shows the board's drive at all.
+- **Download is slow.** Files come from GitHub; the speed is determined by your connection and is not regulated by the program.
+- **Log for troubleshooting.** Run the program with the `--log` switch: the log will be written to a file
+  (Linux `~/.local/share/KarabasFlasher/flasher_log.txt`, Windows `%APPDATA%\KarabasFlasher\flasher_log.txt`,
+  macOS `~/Library/Application Support/KarabasFlasher/flasher_log.txt`). The program version is shown by `--version` and the window title.
+
+### For developers
+
+Building from source, project structure, releases: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Version history: [CHANGELOG.md](CHANGELOG.md).
+
+### License
+
+The code is distributed under the **MIT** license (`LICENSE` file). The program uses Qt 6 under the LGPL-3.0 license
+(details in `THIRD_PARTY.md`). Firmware and cores downloaded by the program belong to their authors and are not part of the project.
