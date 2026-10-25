@@ -1,8 +1,9 @@
 	#!/bin/sh
-	set -e
-	# Применить правило доступа к порту Карабаса (70-karabas.rules) без перезагрузки
+	# Не используем `set -e`: сбой udevadm не должен ломать установку,
+	# особенно в песочнице PackageKit/Discover.
+	# Применить правило доступа к порту Карабаса (70-karabas.rules) без перезагрузки.
 	if [ "$1" = "configure" ] && command -v udevadm >/dev/null 2>&1; then
-	    udevadm control --reload || true
-	    udevadm trigger --subsystem-match=tty --action=change || true
+	    timeout 10 udevadm control --reload >/dev/null 2>&1 || true
+	    timeout 10 udevadm trigger --subsystem-match=tty --action=change >/dev/null 2>&1 || true
 	fi
 	exit 0
