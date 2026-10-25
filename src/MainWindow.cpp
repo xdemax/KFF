@@ -272,7 +272,7 @@ void MainWindow::onBrowse() {
 
 void MainWindow::onRefreshPorts() {
     m_comCombo->clear();
-    m_comCombo->addItem(tr("(none - skip reset)"), QString());
+    m_comCombo->addItem(tr("(not selected - flash without reset)"), QString());
     appendLog(QStringLiteral("Scanning available serial ports..."));
 
     QList<QSerialPortInfo> ports = QSerialPortInfo::availablePorts();

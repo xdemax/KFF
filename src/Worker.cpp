@@ -853,6 +853,10 @@ void Worker::doFlash(const Params& p) {
             emit log(QStringLiteral("Error: No permission to access the serial port. Aborting before flashing."));
             return;
         }
+    } else {
+        emit log(QStringLiteral("Warning: No serial port selected, so the board will not be reset automatically. "
+                                "If the board is not already in bootloader mode, hold BOOTSEL and replug the USB "
+                                "cable, or select a port and press FLASH again."));
     }
 
     emit log(QStringLiteral("Waiting for RPI-RP2 bootloader drive to appear..."));
