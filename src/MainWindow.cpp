@@ -75,7 +75,7 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     auto* row4 = new QHBoxLayout;
     m_flashBtn = new QPushButton(tr("FLASH!"));
     m_flashBtn->setMinimumHeight(40);
-    m_mscBtn = new QPushButton(tr("Open SD card in explorer"));
+    m_mscBtn = new QPushButton(tr("Open SD card in file manager"));
     m_mscBtn->setMinimumHeight(40);
 
     // Значок «?»: подсказка при наведении (и по щелчку - для тачпадов и macOS)
