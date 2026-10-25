@@ -521,7 +521,9 @@ bool Worker::sendMscCommand(const QString& portLocation) {
         msg += " Make sure the port is not used by another application.";
 #endif
         emit log(msg);
-        if (m_permissionDenied) emit portAccessDenied(portLocation);
+        if (m_permissionDenied) {
+            emit portAccessDenied(portLocation);
+        }
         return false;
     }
 
@@ -536,7 +538,9 @@ bool Worker::sendMscCommand(const QString& portLocation) {
         QByteArray resp = sp.readAll();
         while (sp.waitForReadyRead(50)) resp += sp.readAll();
         const QString text = QString::fromUtf8(resp).trimmed();
-        if (!text.isEmpty()) emit log("Device response: " + text);
+        if (!text.isEmpty()) {
+            emit log("Device response: " + text);
+        }
     }
     return true;
 }
