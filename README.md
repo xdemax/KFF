@@ -22,6 +22,10 @@
 
 Прошивку и ядра можно обновлять вместе или по отдельности: например, только ядра.
 
+> **Важно.** Обновление ядер и прямой доступ к SD-карте работают только с прошивками от 18.10.2026.
+> Если вы не уверены, какая прошивка установлена на плате, сначала обновите прошивку — без обновления ядер.
+> И только после успешного обновления прошивки можно обновлять ядра.
+
 ## Как пользоваться
 
 1. Подключите Karabas к компьютеру кабелем USB.
@@ -122,6 +126,10 @@ copying the firmware and replacing cores on the SD card. Karabas Flasher does al
 - **Opens the board's SD card** as a regular drive so you can work with its files directly.
 
 Firmware and cores can be updated together or separately — for example, cores only.
+
+> **Important.** Updating cores and direct SD card access only work with firmware dated 18.10.2026 or newer.
+> If you are not sure which firmware is installed on your board, update the firmware first — without updating cores.
+> Only after the firmware has been updated successfully can you update the cores.
 
 ### How to use
 
