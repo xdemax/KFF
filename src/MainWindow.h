@@ -1,4 +1,5 @@
 #pragma once
+#include <QCloseEvent>
 #include <QFile>
 #include <QString>
 #include <QWidget>
@@ -6,7 +7,6 @@
 #include "Worker.h"
 
 class QCheckBox;
-class QCloseEvent;
 class QComboBox;
 class QLineEdit;
 class QPlainTextEdit;
