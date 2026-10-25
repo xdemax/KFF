@@ -125,6 +125,7 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     connect(m_refreshBtn, &QPushButton::clicked, this, &MainWindow::onRefreshPorts);
     connect(m_flashBtn, &QPushButton::clicked, this, &MainWindow::onFlash);
     connect(m_mscBtn, &QPushButton::clicked, this, &MainWindow::onMsc);
+    connect(m_comCombo, &QComboBox::currentIndexChanged, this, [this](int) { updateActionState(); });
 
     applyOptionState();
     if (m_fileLogging) openLogFile();
@@ -203,12 +204,30 @@ void MainWindow::setBusy(bool busy) {
     }
     if (en) m_downloadBtn->setText(tr("Download via GitHub"));
     applyOptionState();
+    if (en) updateActionState();
 }
 
 void MainWindow::applyOptionState() {
     const bool fw = m_fwChk->isChecked();
     m_pathEdit->setEnabled(fw);
     m_browseBtn->setEnabled(!m_busy && fw);
+    updateActionState();
+}
+
+void MainWindow::updateActionState() {
+    if (m_busy) return;                 // setBusy сам управляет доступностью
+
+    // FLASH!: нужна прошивка (если включено обновление прошивки) и/или готовый набор ядер
+    bool canFlash = false;
+    if (m_fwChk->isChecked() && !m_firmwarePath.isEmpty()) canFlash = true;
+    if (m_coresChk->isChecked()) {
+        const QString marker = workDir() + QStringLiteral("/cores/download_complete.txt");
+        if (QFile::exists(marker)) canFlash = true;
+    }
+    m_flashBtn->setEnabled(canFlash);
+
+    // MSC: нужен реальный порт
+    m_mscBtn->setEnabled(!m_comCombo->currentData().toString().isEmpty());
 }
 
 // ----------------------------------------------------------------------------
@@ -248,6 +267,7 @@ void MainWindow::onBrowse() {
     m_firmwarePath = path;
     m_pathEdit->setText(path);
     appendLog("User manually selected file: " + path);
+    updateActionState();
 }
 
 void MainWindow::onRefreshPorts() {
@@ -287,6 +307,7 @@ void MainWindow::onRefreshPorts() {
                                  "and press 'Refresh ports'."));
     }
     m_comCombo->setCurrentIndex(added == 0 ? 0 : 1);
+    updateActionState();
 }
 
 void MainWindow::onOpenFolder(const QString& path) {
@@ -298,6 +319,7 @@ void MainWindow::onOpenFolder(const QString& path) {
 void MainWindow::onFirmwareReady(const QString& path) {
     m_firmwarePath = path;
     m_pathEdit->setText(path);
+    updateActionState();
 }
 
 void MainWindow::onWorkerFinished() {

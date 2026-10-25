@@ -40,6 +40,7 @@ private:
     Params collectParams() const;
     void setBusy(bool busy);
     void applyOptionState();            // доступность поля прошивки зависит от галки Update firmware
+    void updateActionState();           // доступность FLASH!/MSC по наличию входных данных
     void openLogFile();
     void cleanupTemp();
     void stopThread();
