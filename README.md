@@ -11,7 +11,7 @@
 Раньше для обновления нужно было вручную скачать файлы с GitHub, перевести плату в режим загрузчика,
 скопировать прошивку и заменить ядра на SD-карте. Karabas Flasher делает всё это в одном окне.
 
-**Поддерживаемые платы:** Karabas Go, Karabas Go Mini rev A-F, Karabas Go Mini rev G.
+**Поддерживаемые платы:** Karabas Go, Karabas Go Mini.
 
 ## Что умеет программа
 
@@ -116,7 +116,7 @@ A tool for updating the **firmware** and **cores** of Karabas Go family boards. 
 Previously, updating required manually downloading files from GitHub, putting the board into bootloader mode,
 copying the firmware and replacing cores on the SD card. Karabas Flasher does all of this in a single window.
 
-**Supported boards:** Karabas Go, Karabas Go Mini rev A-F, Karabas Go Mini rev G.
+**Supported boards:** Karabas Go, Karabas Go Mini.
 
 ### What the program does
 
