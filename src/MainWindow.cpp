@@ -163,10 +163,12 @@ void MainWindow::appendLog(const QString& message) {
     const QString line = "[" + QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm:ss") + "] " + message;
 
     QString color;
-    if (message.contains("Error") || message.contains("Failed") || message.contains("Warning")) {
+    if (message.contains("Error", Qt::CaseInsensitive) || message.contains("Failed", Qt::CaseInsensitive) ||
+        message.contains("Warning", Qt::CaseInsensitive)) {
         color = QStringLiteral("#e04040");
-    } else if (message.contains("Success") || message.contains("completed") || message.contains("Found") ||
-               message.contains("Ready") || message.contains("Downloaded")) {
+    } else if (message.contains("Success", Qt::CaseInsensitive) || message.contains("completed", Qt::CaseInsensitive) ||
+               message.contains("Found", Qt::CaseInsensitive) || message.contains("Ready", Qt::CaseInsensitive) ||
+               message.contains("Downloaded", Qt::CaseInsensitive)) {
         color = QStringLiteral("#2ea043");
     }
     const QString style = color.isEmpty() ? QStringLiteral("white-space:pre-wrap;")
@@ -196,7 +198,7 @@ void MainWindow::setBusy(bool busy) {
                        static_cast<QWidget*>(m_fwChk), static_cast<QWidget*>(m_coresChk), static_cast<QWidget*>(m_delTempChk),
                        static_cast<QWidget*>(m_browseBtn), static_cast<QWidget*>(m_comCombo),
                        static_cast<QWidget*>(m_refreshBtn), static_cast<QWidget*>(m_flashBtn),
-                       static_cast<QWidget*>(m_mscBtn)}) {
+                       static_cast<QWidget*>(m_mscBtn), static_cast<QWidget*>(m_mscHelp)}) {
         w->setEnabled(en);
     }
     if (en) m_downloadBtn->setText(tr("Download via GitHub"));
@@ -361,14 +363,15 @@ void MainWindow::onPortAccessDenied(const QString& portLocation) {
     m_accessProc = new QProcess(this);
     m_accessProc->setProcessEnvironment(cleanChildEnvironment());
     connect(m_accessProc, &QProcess::errorOccurred, this, [this](QProcess::ProcessError e) {
-        if (e == QProcess::FailedToStart) {
-            appendLog(QStringLiteral("Error: 'pkexec' was not found (install 'polkit'). Add your user to the "
-                                     "'dialout' group ('uucp' on Arch/Manjaro) and log in again."));
-            m_accessProc->deleteLater();
-            m_accessProc = nullptr;
-        }
+        if (e != QProcess::FailedToStart) return;
+        if (!m_accessProc) return;                  // уже обработано в finished()
+        appendLog(QStringLiteral("Error: 'pkexec' was not found (install 'polkit'). Add your user to the "
+                                 "'dialout' group ('uucp' on Arch/Manjaro) and log in again."));
+        m_accessProc->deleteLater();
+        m_accessProc = nullptr;
     });
     connect(m_accessProc, &QProcess::finished, this, [this](int code, QProcess::ExitStatus status) {
+        if (!m_accessProc) return;                  // уже обработано в errorOccurred()
         const QString err = QString::fromUtf8(m_accessProc->readAllStandardError()).trimmed();
         if (status == QProcess::NormalExit && code == 0) {
             m_accessRuleInstalled = true;

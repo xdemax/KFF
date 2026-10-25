@@ -559,7 +559,6 @@ bool Worker::resetPortToBootloader(const QString& portLocation) {
 #endif
         return false;
     }
-    sp.setBaudRate(1200);
     sp.setDataTerminalReady(true);
     QThread::msleep(50);
     sp.setDataTerminalReady(false);
@@ -579,7 +578,8 @@ bool Worker::waitForMountedVolume(const std::function<QList<Platform::Candidate>
     total.start();
     QElapsedTimer unmountedFor;
     bool seenUnmounted = false;
-    qint64 lastMountTry = -100000;
+    bool mountTried = false;
+    qint64 lastMountTry = 0;
 
     while (total.elapsed() < timeoutMs) {
         if (!pause(500)) return false;                 // отмена
@@ -606,7 +606,8 @@ bool Worker::waitForMountedVolume(const std::function<QList<Platform::Candidate>
             seenUnmounted = true;
             unmountedFor.start();
         }
-        if (unmountedFor.elapsed() >= 2000 && total.elapsed() - lastMountTry >= 2000) {
+        if (unmountedFor.elapsed() >= 2000 && (!mountTried || total.elapsed() - lastMountTry >= 2000)) {
+            mountTried = true;
             lastMountTry = total.elapsed();
             QString detail;
             if (Platform::mountCandidate(c, &detail)) {
@@ -634,7 +635,12 @@ void Worker::rollbackCores(const QStringList& copiedNew, const QList<QPair<QStri
     for (const QString& f : copiedNew) QFile::remove(f);
     int restored = 0;
     for (const auto& pr : movedOld) {
-        if (QFile::rename(pr.second, pr.first)) ++restored;
+        if (QFile::rename(pr.second, pr.first)) {
+            ++restored;
+        } else {
+            emit log("Warning: Could not restore " + QFileInfo(pr.first).fileName() +
+                     " from backup; the file remains at " + pr.second);
+        }
     }
     emit log("Warning: Rollback performed. Restored " + QString::number(restored) + " of " +
              QString::number(movedOld.size()) + " original core files.");
@@ -737,7 +743,9 @@ bool Worker::updateCoresOnSd(const ModelInfo& m, const QString& portLocation, co
     }
     emit log("Deployment finished. Copied " + QString::number(copiedNew.size()) + " new core files to SD root.");
 
-    if (movedOld.isEmpty()) QDir().rmdir(backupDir);     // пустую папку бэкапа убираем
+    if (movedOld.isEmpty() && !QDir().rmdir(backupDir)) {   // пустую папку бэкапа убираем
+        emit log("Warning: Could not remove the empty backup folder: " + backupDir);
+    }
 
     // Служебные файлы ОС (macOS: "._*") удаляем ДО извлечения карты
     {
