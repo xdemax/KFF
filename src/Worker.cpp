@@ -101,7 +101,9 @@ void Worker::doOpenSd(const Params& p) {
         return;
     }
 
-    emit log("Success: The SD card is available at " + sd.mountPoint + " [" + sd.label + "]. Opening it in the file manager...");
+    const QString labelPart = sd.label.isEmpty() ? QString() : " [" + sd.label + "]";
+    emit log("Success: The SD card is available at " + sd.mountPoint + labelPart +
+             ". Opening it in the file manager...");
     emit openFolder(sd.mountPoint);
     emit log(QStringLiteral("To leave this mode, safely eject the memory card from your system."));
 }
