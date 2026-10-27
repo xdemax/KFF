@@ -75,7 +75,7 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     auto* row4 = new QHBoxLayout;
     m_flashBtn = new QPushButton(tr("FLASH!"));
     m_flashBtn->setMinimumHeight(40);
-    m_mscBtn = new QPushButton(tr("Open SD card"));
+    m_mscBtn = new QPushButton(tr("Open SD card >"));
     m_mscBtn->setToolTip(tr("Open the SD card in the file manager (USB card reader mode)."));
 
     // Переключатель режима MSC: 1 -> AT+KARABAS=msc1, 2 -> AT+KARABAS=msc2
@@ -114,7 +114,9 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     m_mscHelp->setToolTip(QStringLiteral(
         "<p>This button switches the Karabas into USB card reader mode and lets you access the SD card "
         "through your system's standard file manager. You can work with the files directly. "
-        "To leave this mode, you need to safely eject the memory card from your system.</p>"));
+        "To leave this mode, you need to safely eject the memory card from your system.</p>"
+        "<p><b>Card 1</b> (MSC mode 1) is the main SD card where the FPGA cores are stored. "
+        "<b>Card 2</b> (MSC mode 2) is an additional card for extra files.</p>"));
     connect(m_mscHelp, &QToolButton::clicked, this, [this]() {
         QToolTip::showText(QCursor::pos(), m_mscHelp->toolTip(), m_mscHelp);
     });
