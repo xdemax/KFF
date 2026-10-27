@@ -12,6 +12,7 @@
 #include <QDir>
 #include <QFileDialog>
 #include <QHBoxLayout>
+#include <QIcon>
 #include <QLabel>
 #include <QLineEdit>
 #include <QMessageBox>
@@ -31,6 +32,7 @@
 
 MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_fileLogging(fileLogging) {
     setWindowTitle(QStringLiteral("Karabas Go Family Firmware Flasher v") + QString::fromLatin1(APP_VERSION));
+    setWindowIcon(QIcon(QStringLiteral(":/krb.jpg")));
 
     auto* root = new QVBoxLayout(this);
 

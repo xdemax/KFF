@@ -43,6 +43,7 @@ else()
 endif()
 
 qt_add_executable(KarabasFlasher WIN32 MACOSX_BUNDLE
+    resources/resources.qrc
     src/main.cpp
     src/MainWindow.cpp
     src/MainWindow.h
