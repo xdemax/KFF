@@ -66,9 +66,11 @@ target_link_libraries(KarabasFlasher PRIVATE
 
 # Иконка приложения для exe (Windows) и .app-бандла (macOS).
 # Linux использует resources/krb.png через install() ниже.
-if(WIN32)
+# Файлы иконок подключаются только если они есть в репозитории.
+if(WIN32 AND EXISTS "${CMAKE_SOURCE_DIR}/resources/icon.rc"
+        AND EXISTS "${CMAKE_SOURCE_DIR}/resources/icon.ico")
     target_sources(KarabasFlasher PRIVATE resources/icon.rc)
-elseif(APPLE)
+elseif(APPLE AND EXISTS "${CMAKE_SOURCE_DIR}/resources/icon.icns")
     set_source_files_properties(resources/icon.icns PROPERTIES
         MACOSX_PACKAGE_LOCATION "Resources")
     target_sources(KarabasFlasher PRIVATE resources/icon.icns)
@@ -79,8 +81,11 @@ if(APPLE)
         MACOSX_BUNDLE_GUI_IDENTIFIER "org.karabas.flasher"
         MACOSX_BUNDLE_BUNDLE_NAME "Karabas Flasher"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
-        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
-        MACOSX_BUNDLE_ICON_FILE "icon.icns")
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}")
+    if(EXISTS "${CMAKE_SOURCE_DIR}/resources/icon.icns")
+        set_target_properties(KarabasFlasher PROPERTIES
+            MACOSX_BUNDLE_ICON_FILE "icon.icns")
+    endif()
 endif()
 
 install(TARGETS KarabasFlasher RUNTIME DESTINATION bin BUNDLE DESTINATION .)
