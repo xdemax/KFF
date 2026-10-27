@@ -75,8 +75,32 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     auto* row4 = new QHBoxLayout;
     m_flashBtn = new QPushButton(tr("FLASH!"));
     m_flashBtn->setMinimumHeight(40);
-    m_mscBtn = new QPushButton(tr("Open SD card in file manager"));
-    m_mscBtn->setMinimumHeight(40);
+    m_mscBtn = new QPushButton(tr("Open SD card"));
+    m_mscBtn->setToolTip(tr("Open the SD card in the file manager (USB card reader mode)."));
+
+    // Переключатель режима MSC: 1 -> AT+KARABAS=msc1, 2 -> AT+KARABAS=msc2
+    m_mscMode1Btn = new QPushButton(QStringLiteral("1"));
+    m_mscMode1Btn->setCheckable(true);
+    m_mscMode1Btn->setFixedWidth(32);
+    m_mscMode1Btn->setMinimumHeight(40);
+    m_mscMode1Btn->setToolTip(tr("MSC mode 1 (AT+KARABAS=msc1)"));
+    m_mscMode2Btn = new QPushButton(QStringLiteral("2"));
+    m_mscMode2Btn->setCheckable(true);
+    m_mscMode2Btn->setFixedWidth(32);
+    m_mscMode2Btn->setMinimumHeight(40);
+    m_mscMode2Btn->setToolTip(tr("MSC mode 2 (AT+KARABAS=msc2)"));
+    m_mscMode1Btn->setChecked(true);
+    m_mscMode2Btn->setChecked(false);
+    connect(m_mscMode1Btn, &QPushButton::clicked, this, [this]() {
+        m_mscMode1Btn->setChecked(true);
+        m_mscMode2Btn->setChecked(false);
+        updateMscModeButtons();
+    });
+    connect(m_mscMode2Btn, &QPushButton::clicked, this, [this]() {
+        m_mscMode2Btn->setChecked(true);
+        m_mscMode1Btn->setChecked(false);
+        updateMscModeButtons();
+    });
 
     // Значок «?»: подсказка при наведении (и по щелчку - для тачпадов и macOS)
     m_mscHelp = new QToolButton;
@@ -96,7 +120,9 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     });
 
     row4->addWidget(m_flashBtn, 2);
-    row4->addWidget(m_mscBtn, 2);
+    row4->addWidget(m_mscBtn, 1);
+    row4->addWidget(m_mscMode1Btn, 0);
+    row4->addWidget(m_mscMode2Btn, 0);
     row4->addWidget(m_mscHelp, 0, Qt::AlignVCenter);
     root->addLayout(row4);
 
@@ -189,7 +215,17 @@ Params MainWindow::collectParams() const {
     p.updateCores = m_coresChk->isChecked();
     p.portLocation = m_comCombo->currentData().toString();
     p.firmwarePath = m_firmwarePath;
+    p.mscMode = m_mscMode2Btn->isChecked() ? 2 : 1;
     return p;
+}
+
+void MainWindow::updateMscModeButtons() {
+    // Ровно одна из кнопок режима MSC должна быть активна
+    if (!m_mscMode1Btn->isChecked() && !m_mscMode2Btn->isChecked()) {
+        m_mscMode1Btn->setChecked(true);
+    }
+    if (m_mscMode1Btn->isChecked()) m_mscMode2Btn->setChecked(false);
+    if (m_mscMode2Btn->isChecked()) m_mscMode1Btn->setChecked(false);
 }
 
 void MainWindow::setBusy(bool busy) {
@@ -199,7 +235,8 @@ void MainWindow::setBusy(bool busy) {
                        static_cast<QWidget*>(m_fwChk), static_cast<QWidget*>(m_coresChk), static_cast<QWidget*>(m_delTempChk),
                        static_cast<QWidget*>(m_browseBtn), static_cast<QWidget*>(m_comCombo),
                        static_cast<QWidget*>(m_refreshBtn), static_cast<QWidget*>(m_flashBtn),
-                       static_cast<QWidget*>(m_mscBtn), static_cast<QWidget*>(m_mscHelp)}) {
+                       static_cast<QWidget*>(m_mscBtn), static_cast<QWidget*>(m_mscMode1Btn),
+                       static_cast<QWidget*>(m_mscMode2Btn), static_cast<QWidget*>(m_mscHelp)}) {
         w->setEnabled(en);
     }
     if (en) m_downloadBtn->setText(tr("Download via GitHub"));

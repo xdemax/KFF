@@ -21,6 +21,7 @@ struct Params {
     bool updateCores = false;       // скачать/заменить ядра на SD-карте
     QString portLocation;       // например /dev/ttyACM0; пусто = пропустить сброс
     QString firmwarePath;
+    int mscMode = 1;            // режим MSC: 1 -> AT+KARABAS=msc1, 2 -> AT+KARABAS=msc2
 };
 
 // Фоновый исполнитель. Живёт в отдельном QThread, управляется из GUI через
@@ -76,13 +77,14 @@ private:
     void doFlash(const Params& p);
     void doOpenSd(const Params& p);
 
-    bool sendMscCommand(const QString& portLocation);
+    bool sendMscCommand(const QString& portLocation, int mscMode);
     bool resetPortToBootloader(const QString& portLocation);
     bool isPortPresent(const QString& portLocation);
 
     bool waitForMountedVolume(const std::function<QList<Platform::Candidate>()>& finder,
                               int timeoutMs, Platform::Candidate* out);
-    bool updateCoresOnSd(const ModelInfo& m, const QString& portLocation, const QStringList& newCores);
+    bool updateCoresOnSd(const ModelInfo& m, const QString& portLocation, int mscMode,
+                         const QStringList& newCores);
     void rollbackCores(const QStringList& copiedNew, const QList<QPair<QString, QString>>& movedOld);
     bool ejectBestEffort(const Platform::Candidate& sd);
 

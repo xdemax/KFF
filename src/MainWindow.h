@@ -41,6 +41,7 @@ private:
     void setBusy(bool busy);
     void applyOptionState();            // доступность поля прошивки зависит от галки Update firmware
     void updateActionState();           // доступность FLASH!/MSC по наличию входных данных
+    void updateMscModeButtons();        // взаимоисключающее состояние кнопок режима MSC
     void openLogFile();
     void cleanupTemp();
     void stopThread();
@@ -56,6 +57,8 @@ private:
     QPushButton* m_refreshBtn = nullptr;
     QPushButton* m_flashBtn = nullptr;
     QPushButton* m_mscBtn = nullptr;
+    QPushButton* m_mscMode1Btn = nullptr;  // режим MSC 1 (AT+KARABAS=msc1)
+    QPushButton* m_mscMode2Btn = nullptr;  // режим MSC 2 (AT+KARABAS=msc2)
     QToolButton* m_mscHelp = nullptr;      // значок «?» с подсказкой про режим кард-ридера
     QPlainTextEdit* m_log = nullptr;
 

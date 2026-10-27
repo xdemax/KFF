@@ -87,7 +87,7 @@ void Worker::doOpenSd(const Params& p) {
     }
 
     const QSet<QString> before = Platform::readyRemovableDisks();   // снимок до команды
-    if (!sendMscCommand(p.portLocation)) return;
+    if (!sendMscCommand(p.portLocation, p.mscMode)) return;
 
     emit log(QStringLiteral("Waiting for the SD card to appear as a drive..."));
     Platform::Candidate sd;
@@ -497,8 +497,10 @@ bool Worker::isPortPresent(const QString& portLocation) {
     return false;
 }
 
-bool Worker::sendMscCommand(const QString& portLocation) {
-    emit log("Sending AT+KARABAS=msc command to " + portLocation + "...");
+bool Worker::sendMscCommand(const QString& portLocation, int mscMode) {
+    const QByteArray cmd = (mscMode == 2) ? QByteArray("AT+KARABAS=msc2\r\n")
+                                          : QByteArray("AT+KARABAS=msc1\r\n");
+    emit log("Sending " + QString::fromLatin1(cmd).trimmed() + " command to " + portLocation + "...");
 
     QSerialPort sp;
     sp.setPortName(portLocation);
@@ -527,7 +529,6 @@ bool Worker::sendMscCommand(const QString& portLocation) {
         return false;
     }
 
-    const QByteArray cmd = "AT+KARABAS=msc\r\n";
     if (sp.write(cmd) != cmd.size() || !sp.waitForBytesWritten(2000)) {
         emit log(QStringLiteral("Error: Failed to write data to the serial port."));
         return false;
@@ -654,7 +655,8 @@ void Worker::rollbackCores(const QStringList& copiedNew, const QList<QPair<QStri
 // Переключение в MSC, бэкап старых ядер, копирование новых, извлечение диска.
 // true - можно продолжать прошивку; false - операция прервана.
 // ----------------------------------------------------------------------------
-bool Worker::updateCoresOnSd(const ModelInfo& m, const QString& portLocation, const QStringList& newCores) {
+bool Worker::updateCoresOnSd(const ModelInfo& m, const QString& portLocation, int mscMode,
+                             const QStringList& newCores) {
     emit log(QStringLiteral("Cores check active. Switching Karabas to SD Card MSC mode..."));
 
     // Снимок USB-дисков с носителем ДО переключения
@@ -665,7 +667,7 @@ bool Worker::updateCoresOnSd(const ModelInfo& m, const QString& portLocation, co
         emit log("USB disks with media before switch: " + (list.isEmpty() ? QStringLiteral("none") : list.join(", ")));
     }
 
-    if (!sendMscCommand(portLocation)) {
+    if (!sendMscCommand(portLocation, mscMode)) {
         emit log(QStringLiteral("Error: Could not switch the device to MSC mode. Aborting."));
         return false;
     }
@@ -817,7 +819,7 @@ void Worker::doFlash(const Params& p) {
             return;
         }
 
-        if (!updateCoresOnSd(m, p.portLocation, newCores)) return;
+        if (!updateCoresOnSd(m, p.portLocation, p.mscMode, newCores)) return;
 
         emit log(QStringLiteral("Waiting for device to become available as a serial port again..."));
         bool portFound = false;
