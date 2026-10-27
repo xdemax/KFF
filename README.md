@@ -47,7 +47,7 @@
 
 ### Работа с SD-картой вручную
 
-Кнопка **Open SD card in file manager** переводит плату в режим USB-кард-ридера: SD-карта появляется в системе как обычный диск,
+Кнопка **Open SD card >** переводит плату в режим USB-кард-ридера: SD-карта появляется в системе как обычный диск,
 и программа открывает её в файловом менеджере. Значок **«?»** рядом с кнопкой показывает подсказку. Чтобы выйти из этого
 режима, безопасно извлеките карту средствами системы.
 
@@ -154,7 +154,7 @@ the program will ask for confirmation and stop at a safe point.
 
 ### Working with the SD card manually
 
-The **Open SD card in file manager** button switches the board into USB card reader mode: the SD card appears in the system
+The **Open SD card >** button switches the board into USB card reader mode: the SD card appears in the system
 as a regular drive, and the program opens it in the file manager. The **"?"** icon next to the button shows a hint.
 To leave this mode, safely eject the card using your system's tools.
 
