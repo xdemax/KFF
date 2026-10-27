@@ -1,4 +1,5 @@
 build/
+build.log
 .cache/
 *.user
 .aider*
