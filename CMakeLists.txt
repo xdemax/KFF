@@ -4,6 +4,7 @@ project(KarabasFlasher VERSION 1.0.0 LANGUAGES CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_AUTOMOC ON)
+set(CMAKE_AUTORCC ON)
 
 find_package(Qt6 QUIET COMPONENTS Core Gui Widgets Network SerialPort)
 if(NOT Qt6_FOUND)
