@@ -6,6 +6,7 @@
 
 #include "Worker.h"
 
+class QButtonGroup;
 class QCheckBox;
 class QComboBox;
 class QLineEdit;
@@ -41,7 +42,6 @@ private:
     void setBusy(bool busy);
     void applyOptionState();            // доступность поля прошивки зависит от галки Update firmware
     void updateActionState();           // доступность FLASH!/MSC по наличию входных данных
-    void updateMscModeButtons();        // взаимоисключающее состояние кнопок режима MSC
     void openLogFile();
     void cleanupTemp();
     void stopThread();
@@ -59,6 +59,7 @@ private:
     QPushButton* m_mscBtn = nullptr;
     QPushButton* m_mscMode1Btn = nullptr;  // режим MSC 1 (AT+KARABAS=msc1)
     QPushButton* m_mscMode2Btn = nullptr;  // режим MSC 2 (AT+KARABAS=msc2)
+    QButtonGroup* m_mscModeGroup = nullptr; // взаимоисключающая группа кнопок режима MSC
     QToolButton* m_mscHelp = nullptr;      // значок «?» с подсказкой про режим кард-ридера
     QPlainTextEdit* m_log = nullptr;
 

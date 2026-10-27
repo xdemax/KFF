@@ -5,6 +5,7 @@
 #include "Util.h"
 #include "Version.h"
 
+#include <QButtonGroup>
 #include <QCheckBox>
 #include <QCloseEvent>
 #include <QComboBox>
@@ -84,29 +85,23 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     m_mscBtn = new QPushButton(tr("Open SD card >"));
     m_mscBtn->setToolTip(tr("Open the SD card in the file manager (USB card reader mode)."));
 
-    // Переключатель режима MSC: 1 -> AT+KARABAS=msc1, 2 -> AT+KARABAS=msc2
+    // Переключатель режима MSC: 1 -> AT+KARABAS=msc1, 2 -> AT+KARABAS=msc2.
+    // QButtonGroup с exclusive=true гарантирует, что активна ровно одна кнопка.
     m_mscMode1Btn = new QPushButton(QStringLiteral("1"));
     m_mscMode1Btn->setCheckable(true);
     m_mscMode1Btn->setFixedWidth(32);
     m_mscMode1Btn->setMinimumHeight(40);
-    m_mscMode1Btn->setToolTip(tr("MSC mode 1 (AT+KARABAS=msc1)"));
+    m_mscMode1Btn->setToolTip(tr("MSC mode 1 (AT+KARABAS=msc1): main SD card with FPGA cores."));
     m_mscMode2Btn = new QPushButton(QStringLiteral("2"));
     m_mscMode2Btn->setCheckable(true);
     m_mscMode2Btn->setFixedWidth(32);
     m_mscMode2Btn->setMinimumHeight(40);
-    m_mscMode2Btn->setToolTip(tr("MSC mode 2 (AT+KARABAS=msc2)"));
+    m_mscMode2Btn->setToolTip(tr("MSC mode 2 (AT+KARABAS=msc2): additional SD card for extra files."));
+    m_mscModeGroup = new QButtonGroup(this);
+    m_mscModeGroup->setExclusive(true);
+    m_mscModeGroup->addButton(m_mscMode1Btn, 1);
+    m_mscModeGroup->addButton(m_mscMode2Btn, 2);
     m_mscMode1Btn->setChecked(true);
-    m_mscMode2Btn->setChecked(false);
-    connect(m_mscMode1Btn, &QPushButton::clicked, this, [this]() {
-        m_mscMode1Btn->setChecked(true);
-        m_mscMode2Btn->setChecked(false);
-        updateMscModeButtons();
-    });
-    connect(m_mscMode2Btn, &QPushButton::clicked, this, [this]() {
-        m_mscMode2Btn->setChecked(true);
-        m_mscMode1Btn->setChecked(false);
-        updateMscModeButtons();
-    });
 
     // Значок «?»: подсказка при наведении (и по щелчку - для тачпадов и macOS)
     m_mscHelp = new QToolButton;
@@ -223,17 +218,8 @@ Params MainWindow::collectParams() const {
     p.updateCores = m_coresChk->isChecked();
     p.portLocation = m_comCombo->currentData().toString();
     p.firmwarePath = m_firmwarePath;
-    p.mscMode = m_mscMode2Btn->isChecked() ? 2 : 1;
+    p.mscMode = (m_mscModeGroup->checkedId() == 2) ? 2 : 1;
     return p;
-}
-
-void MainWindow::updateMscModeButtons() {
-    // Ровно одна из кнопок режима MSC должна быть активна
-    if (!m_mscMode1Btn->isChecked() && !m_mscMode2Btn->isChecked()) {
-        m_mscMode1Btn->setChecked(true);
-    }
-    if (m_mscMode1Btn->isChecked()) m_mscMode2Btn->setChecked(false);
-    if (m_mscMode2Btn->isChecked()) m_mscMode1Btn->setChecked(false);
 }
 
 void MainWindow::setBusy(bool busy) {
