@@ -83,7 +83,7 @@ private:
 
     bool waitForMountedVolume(const std::function<QList<Platform::Candidate>()>& finder,
                               int timeoutMs, Platform::Candidate* out);
-    bool updateCoresOnSd(const ModelInfo& m, const QString& portLocation, int mscMode,
+    bool updateCoresOnSd(const ModelInfo& m, const QString& portLocation,
                          const QStringList& newCores);
     void rollbackCores(const QStringList& copiedNew, const QList<QPair<QString, QString>>& movedOld);
     bool ejectBestEffort(const Platform::Candidate& sd);

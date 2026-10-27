@@ -656,9 +656,9 @@ void Worker::rollbackCores(const QStringList& copiedNew, const QList<QPair<QStri
 // Переключение в MSC, бэкап старых ядер, копирование новых, извлечение диска.
 // true - можно продолжать прошивку; false - операция прервана.
 // ----------------------------------------------------------------------------
-bool Worker::updateCoresOnSd(const ModelInfo& m, const QString& portLocation, int mscMode,
+bool Worker::updateCoresOnSd(const ModelInfo& m, const QString& portLocation,
                              const QStringList& newCores) {
-    emit log(QStringLiteral("Cores check active. Switching Karabas to SD Card MSC mode..."));
+    emit log(QStringLiteral("Cores check active. Switching Karabas to SD Card MSC mode (card 1)..."));
 
     // Снимок USB-дисков с носителем ДО переключения
     const QSet<QString> before = Platform::readyRemovableDisks();
@@ -668,7 +668,8 @@ bool Worker::updateCoresOnSd(const ModelInfo& m, const QString& portLocation, in
         emit log("USB disks with media before switch: " + (list.isEmpty() ? QStringLiteral("none") : list.join(", ")));
     }
 
-    if (!sendMscCommand(portLocation, mscMode)) {
+    // Ядра всегда лежат на карте №1, поэтому режим MSC фиксирован.
+    if (!sendMscCommand(portLocation, 1)) {
         emit log(QStringLiteral("Error: Could not switch the device to MSC mode. Aborting."));
         return false;
     }
@@ -820,7 +821,7 @@ void Worker::doFlash(const Params& p) {
             return;
         }
 
-        if (!updateCoresOnSd(m, p.portLocation, p.mscMode, newCores)) return;
+        if (!updateCoresOnSd(m, p.portLocation, newCores)) return;
 
         emit log(QStringLiteral("Waiting for device to become available as a serial port again..."));
         bool portFound = false;

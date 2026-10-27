@@ -117,7 +117,9 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
         "through your system's standard file manager. You can work with the files directly. "
         "To leave this mode, you need to safely eject the memory card from your system.</p>"
         "<p><b>Card 1</b> (MSC mode 1) is the main SD card where the FPGA cores are stored. "
-        "<b>Card 2</b> (MSC mode 2) is an additional card for extra files.</p>"));
+        "<b>Card 2</b> (MSC mode 2) is an additional card for extra files.</p>"
+        "<p>The 1/2 switch only affects which card is opened by this button. "
+        "Core updates always use card 1.</p>"));
     connect(m_mscHelp, &QToolButton::clicked, this, [this]() {
         QToolTip::showText(QCursor::pos(), m_mscHelp->toolTip(), m_mscHelp);
     });
