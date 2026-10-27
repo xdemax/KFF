@@ -499,7 +499,7 @@ bool Worker::isPortPresent(const QString& portLocation) {
 
 bool Worker::sendMscCommand(const QString& portLocation, int mscMode) {
     const QByteArray cmd = (mscMode == 2) ? QByteArray("AT+KARABAS=msc2\r\n")
-                                          : QByteArray("AT+KARABAS=msc1\r\n");
+                                          : QByteArray("AT+KARABAS=msc\r\n");
     emit log("Sending " + QString::fromLatin1(cmd).trimmed() + " command to " + portLocation +
              " (MSC mode " + QString::number(mscMode) + ")...");
 
