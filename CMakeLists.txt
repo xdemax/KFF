@@ -64,12 +64,23 @@ target_include_directories(KarabasFlasher PRIVATE ${CMAKE_BINARY_DIR}/generated)
 target_link_libraries(KarabasFlasher PRIVATE
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::SerialPort)
 
+# Иконка приложения для exe (Windows) и .app-бандла (macOS).
+# Linux использует resources/krb.png через install() ниже.
+if(WIN32)
+    target_sources(KarabasFlasher PRIVATE resources/icon.rc)
+elseif(APPLE)
+    set_source_files_properties(resources/icon.icns PROPERTIES
+        MACOSX_PACKAGE_LOCATION "Resources")
+    target_sources(KarabasFlasher PRIVATE resources/icon.icns)
+endif()
+
 if(APPLE)
     set_target_properties(KarabasFlasher PROPERTIES
         MACOSX_BUNDLE_GUI_IDENTIFIER "org.karabas.flasher"
         MACOSX_BUNDLE_BUNDLE_NAME "Karabas Flasher"
         MACOSX_BUNDLE_SHORT_VERSION_STRING "${PROJECT_VERSION}"
-        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}")
+        MACOSX_BUNDLE_BUNDLE_VERSION "${PROJECT_VERSION}"
+        MACOSX_BUNDLE_ICON_FILE "icon.icns")
 endif()
 
 install(TARGETS KarabasFlasher RUNTIME DESTINATION bin BUNDLE DESTINATION .)
