@@ -626,7 +626,9 @@ bool Worker::waitForMountedVolume(const std::function<QList<Platform::Candidate>
                 *out = c;
                 return true;
             }
-            emit log("Warning: Automatic mount failed: " + detail);
+            // Сразу после появления раздела udisks может ещё не знать о нём -
+            // это ожидаемо, повторяем попытку через 2 секунды.
+            emit log("Mount attempt failed (will retry): " + detail);
         }
     }
     return false;
