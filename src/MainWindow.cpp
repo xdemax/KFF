@@ -32,9 +32,9 @@
 
 MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_fileLogging(fileLogging) {
     setWindowTitle(QStringLiteral("Karabas Go Family Firmware Flasher v") + QString::fromLatin1(APP_VERSION));
-    const QIcon appIcon(QStringLiteral(":/krb.jpg"));
+    const QIcon appIcon(QStringLiteral(":/krb.png"));
     if (appIcon.isNull()) {
-        qWarning("Icon resource ':/krb.jpg' could not be loaded (missing file or JPEG plugin).");
+        qWarning("Icon resource ':/krb.png' could not be loaded (missing file or PNG plugin).");
     }
     setWindowIcon(appIcon);
 
