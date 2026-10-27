@@ -541,6 +541,11 @@ bool Worker::sendMscCommand(const QString& portLocation, int mscMode) {
         while (sp.waitForReadyRead(50)) resp += sp.readAll();
         const QString text = QString::fromUtf8(resp).trimmed();
         if (!text.isEmpty()) {
+            if (text.contains(QStringLiteral("ERROR"), Qt::CaseInsensitive)) {
+                emit log("Error: The device rejected the MSC command: " + text +
+                         ". Check that the firmware supports this command and the MSC mode number.");
+                return false;
+            }
             emit log("Device response: " + text);
         }
     }
