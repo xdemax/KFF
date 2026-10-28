@@ -135,34 +135,30 @@ bool ejectCandidate(const Candidate& c, QString* detail) {
 
     ::sync();
 
-    // 1) размонтирование (Spotlight может ненадолго занять том - повторяем)
-    bool unmounted = false;
+    // diskutil eject сам размонтирует том и извлечёт носитель. Отдельный unmount перед eject
+    // приводит к системному уведомлению "disk not ejected properly", поэтому не используем его.
+    // Spotlight может ненадолго занять том - повторяем попытку.
     QString lastErr;
-    for (int i = 0; i < 10 && !unmounted; ++i) {
+    for (int i = 0; i < 10; ++i) {
         QString out, err;
         const int rc = runProcess(QStringLiteral("diskutil"),
-                                  QStringList() << QStringLiteral("unmount") << c.mountPoint, 15000, &out, &err);
-        if (rc == 0) {
-            unmounted = true;
-        } else {
-            lastErr = (err.trimmed().isEmpty() ? out.trimmed() : err.trimmed());
-            QThread::msleep(500);
-        }
-    }
-    if (!unmounted) {
-        setDetail(QStringLiteral("cannot unmount ") + c.mountPoint + QStringLiteral(": ") + lastErr);
-        return false;
+                                  QStringList() << QStringLiteral("eject") << c.diskNode, 15000, &out, &err);
+        if (rc == 0) return true;
+        lastErr = (err.trimmed().isEmpty() ? out.trimmed() : err.trimmed());
+        QThread::msleep(500);
     }
 
-    // 2) извлечение носителя
+    // Запасной вариант: сначала размонтировать, затем извлечь
     QString out, err;
-    const int rc = runProcess(QStringLiteral("diskutil"),
-                              QStringList() << QStringLiteral("eject") << c.diskNode, 15000, &out, &err);
-    if (rc != 0) {
-        setDetail(QStringLiteral("eject failed: ") + (err.trimmed().isEmpty() ? out.trimmed() : err.trimmed()));
-        return false;
+    if (runProcess(QStringLiteral("diskutil"),
+                   QStringList() << QStringLiteral("unmount") << c.mountPoint, 15000, &out, &err) == 0) {
+        if (runProcess(QStringLiteral("diskutil"),
+                       QStringList() << QStringLiteral("eject") << c.diskNode, 15000, &out, &err) == 0) {
+            return true;
+        }
     }
-    return true;
+    setDetail(QStringLiteral("eject failed: ") + lastErr);
+    return false;
 }
 
 int cleanupVolumeJunk(const QString& mountPoint, const QStringList& extraDirs) {
