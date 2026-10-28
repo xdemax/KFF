@@ -644,7 +644,9 @@ bool Worker::waitForMountedVolume(const std::function<QList<Platform::Candidate>
             seenUnmounted = true;
             unmountedFor.start();
         }
-        if (unmountedFor.elapsed() >= 2000 && (!mountTried || total.elapsed() - lastMountTry >= 2000)) {
+        // Начинаем монтировать почти сразу: udisks обычно готов через 200-500 мс,
+        // а при неудаче повторяем каждые 2 секунды.
+        if (unmountedFor.elapsed() >= 300 && (!mountTried || total.elapsed() - lastMountTry >= 2000)) {
             mountTried = true;
             lastMountTry = total.elapsed();
             QString detail;
