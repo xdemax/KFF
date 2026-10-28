@@ -23,5 +23,28 @@ bool isValidUf2(const QString& path, QString* why) {
     const quint32 mEnd = qFromLittleEndian<quint32>(blk.constData() + 508);
     if (m0 != 0x0A324655u || m1 != 0x9E5D5157u || mEnd != 0x0AB16F30u)
         return fail("UF2 magic numbers not found");
+
+    // Проверяем, что число блоков соответствует размеру файла
+    const quint32 numBlocks = qFromLittleEndian<quint32>(blk.constData() + 24);
+    if (numBlocks == 0) return fail("UF2 file declares zero blocks");
+    if (static_cast<qint64>(numBlocks) * 512 != size)
+        return fail("UF2 block count does not match file size");
+
+    // Family ID RP2040 (0xE48BFF56) в поле fileSize/flags блока
+    const quint32 familyId = qFromLittleEndian<quint32>(blk.constData() + 28);
+    if (familyId != 0xE48BFF56u)
+        return fail("UF2 file is not for RP2040 (unexpected family ID)");
+
+    // Проверяем magic во всех блоках (защита от обрезанных/битых файлов)
+    f.seek(0);
+    for (quint32 i = 0; i < numBlocks; ++i) {
+        const QByteArray b = f.read(512);
+        if (b.size() != 512) return fail("read error in block " + QString::number(i));
+        const quint32 b0   = qFromLittleEndian<quint32>(b.constData());
+        const quint32 b1   = qFromLittleEndian<quint32>(b.constData() + 4);
+        const quint32 bEnd = qFromLittleEndian<quint32>(b.constData() + 508);
+        if (b0 != 0x0A324655u || b1 != 0x9E5D5157u || bEnd != 0x0AB16F30u)
+            return fail("UF2 magic numbers not found in block " + QString::number(i));
+    }
     return true;
 }

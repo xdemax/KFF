@@ -19,6 +19,7 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QSerialPort>
+#include <QStorageInfo>
 #include <QSerialPortInfo>
 #include <QThread>
 #include <QTimer>
@@ -209,6 +210,7 @@ QList<Worker::JobResult> Worker::downloadFiles(const QList<DownloadJob>& jobs, i
         qint64 bytes = 0;
         bool tooBig = false;
         bool writeFailed = false;
+        int attempt = 0;                // номер попытки (0 - первая)
     };
 
     QNetworkAccessManager nam;      // один на все файлы: соединение и TLS-сессия переиспользуются
@@ -285,7 +287,33 @@ QList<Worker::JobResult> Worker::downloadFiles(const QList<DownloadJob>& jobs, i
             emit log("Downloaded core: " + name + " (" + QString::number(a.bytes / 1024) + " KB, " +
                      QString::number(a.timer.elapsed() / 1000.0, 'f', 1) + " s)");
         } else if (!m_cancel.load()) {
-            emit log("Failed to download core: " + name + " (" + r.error + ")");
+            // Одна повторная попытка на файл: сетевые сбои обычно временные
+            if (a.attempt < 1) {
+                emit log("Retrying core: " + name + " (" + r.error + ")");
+                results[a.index] = JobResult();     // сброс результата
+                results[a.index].error = QStringLiteral("cancelled");
+                // Возвращаем задание в очередь
+                --next;
+                // Перезаписываем задание в очереди на тот же индекс
+                // (next указывает на следующий, поэтому сдвигаем и подменяем)
+                // Проще: запускаем загрузку этого файла напрямую
+                std::unique_ptr<QSaveFile> file(new QSaveFile(jobs[a.index].dest));
+                if (file->open(QIODevice::WriteOnly)) {
+                    QNetworkReply* retry = nam.get(makeRequest(jobs[a.index].url));
+                    Active ra;
+                    ra.index = a.index;
+                    ra.file = file.release();
+                    ra.timer.start();
+                    ra.attempt = a.attempt + 1;
+                    active.insert(retry, ra);
+                    QObject::connect(retry, &QNetworkReply::readyRead, &loop, [&, retry]() { drain(retry); });
+                    QObject::connect(retry, &QNetworkReply::finished, &loop, [&, retry]() { finish(retry); });
+                } else {
+                    emit log("Failed to download core: " + name + " (" + r.error + ")");
+                }
+            } else {
+                emit log("Failed to download core: " + name + " (" + r.error + ")");
+            }
         }
 
         startMore();
@@ -731,7 +759,19 @@ bool Worker::updateCoresOnSd(const ModelInfo& m, const QString& portLocation,
         return false;
     }
 
-    // 2) Копирование новых ядер (копия, а не перенос: рабочая папка остаётся для повторной прошивки)
+    // 2) Проверка свободного места: суммарный размер новых ядер + запас 1 МБ
+    qint64 needed = 1024 * 1024;
+    for (const QString& src : newCores) needed += QFileInfo(src).size();
+    const qint64 available = QStorageInfo(root).bytesAvailable();
+    if (available >= 0 && available < needed) {
+        emit log("Error: Not enough free space on the SD card (need " + QString::number(needed / 1024) +
+                 " KB, available " + QString::number(available / 1024) + " KB). Aborting.");
+        rollbackCores(QStringList(), movedOld);
+        ejectBestEffort(sd);
+        return false;
+    }
+
+    // 3) Копирование новых ядер (копия, а не перенос: рабочая папка остаётся для повторной прошивки)
     emit log(QStringLiteral("Copying new cores to SD root..."));
     QStringList copiedNew;
     bool copyFailed = false;
