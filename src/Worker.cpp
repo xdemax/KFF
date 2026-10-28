@@ -244,8 +244,9 @@ QList<Worker::JobResult> Worker::downloadFiles(const QList<DownloadJob>& jobs, i
     };
 
     std::function<void()> startMore;
+    std::function<void(QNetworkReply*)> finish;
 
-    auto finish = [&](QNetworkReply* reply) {
+    finish = [&](QNetworkReply* reply) {
         drain(reply);
         auto it = active.find(reply);
         if (it == active.end()) return;
