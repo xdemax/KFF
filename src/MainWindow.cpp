@@ -283,6 +283,7 @@ void MainWindow::onDownload() {
     setBusy(true);
     m_downloadBtn->setText(tr("Downloading..."));
     const Params p = collectParams();
+    m_worker->clearCancel();        // сброс в GUI-потоке до постановки задачи в очередь
     QMetaObject::invokeMethod(m_worker, [w = m_worker, p]() { w->runDownload(p); }, Qt::QueuedConnection);
 }
 
@@ -290,6 +291,7 @@ void MainWindow::onFlash() {
     if (m_busy) return;
     setBusy(true);
     const Params p = collectParams();
+    m_worker->clearCancel();        // сброс в GUI-потоке до постановки задачи в очередь
     QMetaObject::invokeMethod(m_worker, [w = m_worker, p]() { w->runFlash(p); }, Qt::QueuedConnection);
 }
 
@@ -297,6 +299,7 @@ void MainWindow::onMsc() {
     if (m_busy) return;
     setBusy(true);
     const Params p = collectParams();
+    m_worker->clearCancel();        // сброс в GUI-потоке до постановки задачи в очередь
     QMetaObject::invokeMethod(m_worker, [w = m_worker, p]() { w->runMsc(p); }, Qt::QueuedConnection);
 }
 

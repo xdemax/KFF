@@ -32,6 +32,7 @@ public:
     explicit Worker(QObject* parent = nullptr) : QObject(parent) {}
 
     void requestCancel() { m_cancel.store(true); }     // можно вызывать из GUI-потока
+    void clearCancel() { m_cancel.store(false); }      // сброс флага до постановки задачи в очередь
 
     void runDownload(const Params& p);
     void runFlash(const Params& p);

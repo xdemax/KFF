@@ -74,10 +74,10 @@ bool Worker::pause(int ms) {
     return !m_cancel.load();
 }
 
-void Worker::runDownload(const Params& p) { m_cancel.store(false); guarded([&]() { doDownload(p); }); }
-void Worker::runFlash(const Params& p) { m_cancel.store(false); guarded([&]() { doFlash(p); }); }
+void Worker::runDownload(const Params& p) { guarded([&]() { doDownload(p); }); }
+void Worker::runFlash(const Params& p) { guarded([&]() { doFlash(p); }); }
 
-void Worker::runMsc(const Params& p) { m_cancel.store(false); guarded([&]() { doOpenSd(p); }); }
+void Worker::runMsc(const Params& p) { guarded([&]() { doOpenSd(p); }); }
 
 // Кнопка «Open SD card in explorer»: режим MSC, ожидание диска, открытие папки карты.
 void Worker::doOpenSd(const Params& p) {
