@@ -52,7 +52,6 @@ QString joinPath(const QString& dir, const QString& name) {
 // Служебное
 // ----------------------------------------------------------------------------
 void Worker::guarded(const std::function<void()>& fn) {
-    m_cancel.store(false);
     m_permissionDenied = false;
     try {
         fn();
@@ -75,10 +74,10 @@ bool Worker::pause(int ms) {
     return !m_cancel.load();
 }
 
-void Worker::runDownload(const Params& p) { guarded([&]() { doDownload(p); }); }
-void Worker::runFlash(const Params& p) { guarded([&]() { doFlash(p); }); }
+void Worker::runDownload(const Params& p) { m_cancel.store(false); guarded([&]() { doDownload(p); }); }
+void Worker::runFlash(const Params& p) { m_cancel.store(false); guarded([&]() { doFlash(p); }); }
 
-void Worker::runMsc(const Params& p) { guarded([&]() { doOpenSd(p); }); }
+void Worker::runMsc(const Params& p) { m_cancel.store(false); guarded([&]() { doOpenSd(p); }); }
 
 // Кнопка «Open SD card in explorer»: режим MSC, ожидание диска, открытие папки карты.
 void Worker::doOpenSd(const Params& p) {
@@ -293,11 +292,7 @@ QList<Worker::JobResult> Worker::downloadFiles(const QList<DownloadJob>& jobs, i
                 emit log("Retrying core: " + name + " (" + r.error + ")");
                 results[a.index] = JobResult();     // сброс результата
                 results[a.index].error = QStringLiteral("cancelled");
-                // Возвращаем задание в очередь
-                --next;
-                // Перезаписываем задание в очереди на тот же индекс
-                // (next указывает на следующий, поэтому сдвигаем и подменяем)
-                // Проще: запускаем загрузку этого файла напрямую
+                // Запускаем повторную загрузку этого файла напрямую (без изменения next)
                 std::unique_ptr<QSaveFile> file(new QSaveFile(jobs[a.index].dest));
                 if (file->open(QIODevice::WriteOnly)) {
                     QNetworkReply* retry = nam.get(makeRequest(jobs[a.index].url));

@@ -85,13 +85,13 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     m_mscBtn = new QPushButton(tr("Open SD card >"));
     m_mscBtn->setToolTip(tr("Open the SD card in the file manager (USB card reader mode)."));
 
-    // Переключатель режима MSC: 1 -> AT+KARABAS=msc1, 2 -> AT+KARABAS=msc2.
+    // Переключатель режима MSC: 1 -> AT+KARABAS=msc, 2 -> AT+KARABAS=msc2.
     // QButtonGroup с exclusive=true гарантирует, что активна ровно одна кнопка.
     m_mscMode1Btn = new QPushButton(QStringLiteral("1"));
     m_mscMode1Btn->setCheckable(true);
     m_mscMode1Btn->setFixedWidth(32);
     m_mscMode1Btn->setMinimumHeight(40);
-    m_mscMode1Btn->setToolTip(tr("MSC mode 1 (AT+KARABAS=msc1): main SD card with FPGA cores."));
+    m_mscMode1Btn->setToolTip(tr("MSC mode 1 (AT+KARABAS=msc): main SD card with FPGA cores."));
     m_mscMode2Btn = new QPushButton(QStringLiteral("2"));
     m_mscMode2Btn->setCheckable(true);
     m_mscMode2Btn->setFixedWidth(32);
@@ -157,6 +157,18 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     connect(m_flashBtn, &QPushButton::clicked, this, &MainWindow::onFlash);
     connect(m_mscBtn, &QPushButton::clicked, this, &MainWindow::onMsc);
     connect(m_comCombo, &QComboBox::currentIndexChanged, this, [this](int) { updateActionState(); });
+    connect(m_modelCombo, &QComboBox::currentIndexChanged, this, [this](int idx) {
+        // Прошивка привязана к модели: при смене модели сбрасываем путь, чтобы
+        // случайно не прошить плату прошивкой другой модели.
+        if (m_firmwareModelIndex >= 0 && m_firmwareModelIndex != idx && !m_firmwarePath.isEmpty()) {
+            appendLog(QStringLiteral("Warning: Device model changed; the previously selected firmware was "
+                                     "discarded. Download or select the firmware for the new model."));
+            m_firmwarePath.clear();
+            m_pathEdit->clear();
+            m_firmwareModelIndex = -1;
+        }
+        updateActionState();
+    });
 
     applyOptionState();
     if (m_fileLogging) openLogFile();
@@ -298,6 +310,7 @@ void MainWindow::onBrowse() {
         return;
     }
     m_firmwarePath = path;
+    m_firmwareModelIndex = m_modelCombo->currentIndex();
     m_pathEdit->setText(path);
     appendLog("User manually selected file: " + path);
     updateActionState();
@@ -339,7 +352,13 @@ void MainWindow::onRefreshPorts() {
         appendLog(QStringLiteral("Error: Active serial ports not found. Connect the Karabas by USB "
                                  "and press 'Refresh ports'."));
     }
-    m_comCombo->setCurrentIndex(added == 0 ? 0 : 1);
+    // Не выбираем порт автоматически, если USB-портов больше одного: можно случайно
+    // отправить команду MSC или 1200 bps на чужое устройство (Arduino и т.п.).
+    m_comCombo->setCurrentIndex(added == 1 ? 1 : 0);
+    if (added > 1) {
+        appendLog(QStringLiteral("Warning: More than one USB serial port found. Select the Karabas port "
+                                 "manually."));
+    }
     updateActionState();
 }
 
@@ -351,6 +370,7 @@ void MainWindow::onOpenFolder(const QString& path) {
 
 void MainWindow::onFirmwareReady(const QString& path) {
     m_firmwarePath = path;
+    m_firmwareModelIndex = m_modelCombo->currentIndex();
     m_pathEdit->setText(path);
     updateActionState();
 }

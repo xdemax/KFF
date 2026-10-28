@@ -57,7 +57,7 @@ private:
     QPushButton* m_refreshBtn = nullptr;
     QPushButton* m_flashBtn = nullptr;
     QPushButton* m_mscBtn = nullptr;
-    QPushButton* m_mscMode1Btn = nullptr;  // режим MSC 1 (AT+KARABAS=msc1)
+    QPushButton* m_mscMode1Btn = nullptr;  // режим MSC 1 (AT+KARABAS=msc)
     QPushButton* m_mscMode2Btn = nullptr;  // режим MSC 2 (AT+KARABAS=msc2)
     QButtonGroup* m_mscModeGroup = nullptr; // взаимоисключающая группа кнопок режима MSC
     QToolButton* m_mscHelp = nullptr;      // значок «?» с подсказкой про режим кард-ридера
@@ -68,6 +68,7 @@ private:
     Worker* m_worker = nullptr;
 
     QString m_firmwarePath;
+    int m_firmwareModelIndex = -1;        // модель, для которой скачана/выбрана прошивка
     bool m_busy = false;
     bool m_closeRequested = false;
     bool m_accessRuleInstalled = false;   // правило udev уже ставилось в этом запуске

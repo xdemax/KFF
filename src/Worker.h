@@ -21,7 +21,7 @@ struct Params {
     bool updateCores = false;       // скачать/заменить ядра на SD-карте
     QString portLocation;       // например /dev/ttyACM0; пусто = пропустить сброс
     QString firmwarePath;
-    int mscMode = 1;            // режим MSC: 1 -> AT+KARABAS=msc1, 2 -> AT+KARABAS=msc2
+    int mscMode = 1;            // режим MSC: 1 -> AT+KARABAS=msc, 2 -> AT+KARABAS=msc2
 };
 
 // Фоновый исполнитель. Живёт в отдельном QThread, управляется из GUI через

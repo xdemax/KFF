@@ -10,7 +10,7 @@
 |---------|---------------------------|--------|
 | Linux   | `src/platform_linux.cpp`  | написан, не проверен на железе |
 | Windows | `src/platform_windows.cpp`| логика перенесена из проверенной версии на WinAPI; в составе Qt-проекта не проверена |
-| macOS   | `src/platform_macos.cpp`  | написан без Mac, не проверен |
+| macOS   | `src/platform_macos.cpp`  | написан без Mac, не проверен на реальном железе |
 
 ## Установка на Ubuntu / Debian (.deb)
 
