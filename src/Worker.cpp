@@ -942,4 +942,17 @@ void Worker::doFlash(const Params& p) {
             emit log("Flash write error: " + err);
         }
     }
+
+    // Если диск RPI-RP2 всё ещё смонтирован (плата не перезагрузилась сама), извлекаем его.
+    // На macOS это делается одним diskutil eject, иначе система показывает уведомление
+    // "disk not ejected properly".
+    const QList<Platform::Candidate> still = Platform::bootloaderDisks();
+    for (const Platform::Candidate& c : still) {
+        QString detail;
+        if (Platform::ejectCandidate(c, &detail)) {
+            emit log(QStringLiteral("Bootloader drive ejected."));
+        } else if (!detail.isEmpty()) {
+            emit log("Warning: Could not eject the bootloader drive: " + detail);
+        }
+    }
 }
