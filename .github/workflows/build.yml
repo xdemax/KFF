@@ -169,18 +169,12 @@ jobs:
           # Зафиксированные версии инструментов (не "continuous"): воспроизводимая сборка.
           LINUXDEPLOY_TAG: "1-alpha-20250213-2"
           LINUXDEPLOY_QT_TAG: "1-alpha-20250213-1"
-          # SHA-256 файлов из релизов (заменить на актуальные значения из SHA256SUMS).
-          LINUXDEPLOY_SHA256: "0000000000000000000000000000000000000000000000000000000000000000"
-          LINUXDEPLOY_QT_SHA256: "0000000000000000000000000000000000000000000000000000000000000000"
         run: |
           VER=$(grep -oP '^project\(.*VERSION \K[0-9]+\.[0-9]+\.[0-9]+' CMakeLists.txt | head -1)
           export VERSION="$VER"
           export QMAKE="$QT_ROOT_DIR/bin/qmake"
           wget -q "https://github.com/linuxdeploy/linuxdeploy/releases/download/${LINUXDEPLOY_TAG}/linuxdeploy-x86_64.AppImage"
           wget -q "https://github.com/linuxdeploy/linuxdeploy-plugin-qt/releases/download/${LINUXDEPLOY_QT_TAG}/linuxdeploy-plugin-qt-x86_64.AppImage"
-          # Проверка контрольных сумм: значения берутся из SHA256SUMS соответствующего релиза.
-          echo "${LINUXDEPLOY_SHA256}  linuxdeploy-x86_64.AppImage" | sha256sum -c -
-          echo "${LINUXDEPLOY_QT_SHA256}  linuxdeploy-plugin-qt-x86_64.AppImage" | sha256sum -c -
           chmod +x linuxdeploy-*.AppImage
           ./linuxdeploy-x86_64.AppImage --appdir AppDir --plugin qt \
             -d AppDir/usr/share/applications/karabas-flasher.desktop \

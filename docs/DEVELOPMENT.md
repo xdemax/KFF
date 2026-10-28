@@ -17,7 +17,7 @@
 Готовый пакет лежит в разделе Releases на GitHub (для Ubuntu 24.04 и новее). `apt` сам доставит все
 зависимости (Qt 6, udisks2 и т.д.) и установит правило доступа к порту:
 
-    sudo apt install ./karabas-flasher_0.1.0_amd64_ubuntu24.04.deb
+    sudo apt install ./karabas-flasher_1.0.0_amd64_ubuntu24.04.deb
 
 **Ubuntu 22.04 и старше:** в их репозиториях нет Qt SerialPort (`libqt6serialport6`), поэтому `.deb` не подойдёт - 
 используйте AppImage (Qt внутри). На Debian 12 `.deb` не проверялся: он собран на Ubuntu 24.04 и может требовать более новую glibc.
@@ -28,8 +28,8 @@
 
 **AppImage (любой дистрибутив).** В релизе есть один файл `KarabasFlasher-<версия>-x86_64.AppImage` с Qt внутри:
 
-    chmod +x KarabasFlasher-0.1.0-x86_64.AppImage
-    ./KarabasFlasher-0.1.0-x86_64.AppImage
+    chmod +x KarabasFlasher-1.0.0-x86_64.AppImage
+    ./KarabasFlasher-1.0.0-x86_64.AppImage
 
 На некоторых системах нужен пакет `libfuse2` (иначе: `./KarabasFlasher-...AppImage --appimage-extract-and-run`).
 Системные части (udisks2, polkit, systemd) должны быть установлены - на обычном рабочем столе они уже есть.
@@ -102,12 +102,12 @@ LGPL-3.0 (подключается динамически; подробност�
 
 Как выпустить версию:
 
-    # 1. поднять версию в CMakeLists.txt (project(... VERSION 0.2.0 ...)) и дописать CHANGELOG.md
-    git add -A && git commit -m "Release 0.2.0"
+    # 1. поднять версию в CMakeLists.txt (project(... VERSION 1.1.0 ...)) и дописать CHANGELOG.md
+    git add -A && git commit -m "Release 1.1.0"
     git push
     # 2. поставить тег (строго v + номер из CMakeLists.txt) и отправить его
-    git tag v0.2.0
-    git push origin v0.2.0
+    git tag v1.1.0
+    git push origin v1.1.0
 
 По тегу Actions соберёт три системы и создаст релиз на GitHub с файлами `.dmg`, `.zip` и `.tar.gz`.
 Если тег не совпадает с версией в `CMakeLists.txt`, выпуск остановится с сообщением об ошибке.

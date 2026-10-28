@@ -305,7 +305,8 @@ QList<Worker::JobResult> Worker::downloadFiles(const QList<DownloadJob>& jobs, i
                     QObject::connect(retry, &QNetworkReply::readyRead, &loop, [&, retry]() { drain(retry); });
                     QObject::connect(retry, &QNetworkReply::finished, &loop, [&, retry]() { finish(retry); });
                 } else {
-                    emit log("Failed to download core: " + name + " (" + r.error + ")");
+                    emit log("Failed to download core: " + name + " (cannot create file: " +
+                             file->errorString() + ")");
                 }
             } else {
                 emit log("Failed to download core: " + name + " (" + r.error + ")");
