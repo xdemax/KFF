@@ -286,7 +286,8 @@ void MainWindow::setBusy(bool busy) {
     m_busy = busy;
     const bool en = !busy;
     for (QWidget* w : {static_cast<QWidget*>(m_modelCombo), static_cast<QWidget*>(m_downloadBtn),
-                       static_cast<QWidget*>(m_fwChk), static_cast<QWidget*>(m_coresChk), static_cast<QWidget*>(m_delTempChk),
+                       static_cast<QWidget*>(m_fwChk), static_cast<QWidget*>(m_extraChk),
+                       static_cast<QWidget*>(m_coresChk), static_cast<QWidget*>(m_delTempChk),
                        static_cast<QWidget*>(m_browseBtn), static_cast<QWidget*>(m_comCombo),
                        static_cast<QWidget*>(m_refreshBtn), static_cast<QWidget*>(m_flashBtn),
                        static_cast<QWidget*>(m_mscBtn), static_cast<QWidget*>(m_mscMode1Btn),
