@@ -752,6 +752,7 @@ bool Worker::sendMscCommand(const QString& portLocation, int mscMode) {
 // Запрос версии: AT+KARABAS=version -> +KARABAS:<firmware>;<board>;<core id>;<core build>
 bool Worker::queryVersion(const QString& portLocation, QString* raw, int* board) {
     emit log("Sending AT+KARABAS=version command to " + portLocation + "...");
+    m_permissionDenied = false;
 
     QSerialPort sp;
     sp.setPortName(portLocation);
@@ -763,7 +764,6 @@ bool Worker::queryVersion(const QString& portLocation, QString* raw, int* board)
 
     if (!sp.open(QIODevice::ReadWrite)) {
         QString msg = "Error: Failed to open " + portLocation + ": " + sp.errorString() + ".";
-        m_permissionDenied = false;
 #if defined(Q_OS_LINUX)
         if (sp.error() == QSerialPort::PermissionError) {
             msg += " No permission to access the port.";
