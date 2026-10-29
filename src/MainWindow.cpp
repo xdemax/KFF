@@ -276,6 +276,7 @@ Params MainWindow::collectParams() const {
     p.modelIndex = m_modelCombo->currentIndex();
     p.updateFirmware = m_fwChk->isChecked();
     p.updateCores = m_coresChk->isChecked();
+    p.updateExtra = m_extraChk->isChecked();
     p.portLocation = m_comCombo->currentData().toString();
     p.firmwarePath = m_firmwarePath;
     p.mscMode = (m_mscModeGroup->checkedId() == 2) ? 2 : 1;
@@ -315,6 +316,10 @@ void MainWindow::updateActionState() {
     if (m_fwChk->isChecked() && !m_firmwarePath.isEmpty()) canFlash = true;
     if (m_coresChk->isChecked()) {
         const QString marker = workDir() + QStringLiteral("/cores/download_complete.txt");
+        if (QFile::exists(marker)) canFlash = true;
+    }
+    if (m_extraChk->isChecked()) {
+        const QString marker = workDir() + QStringLiteral("/extra/extra_complete.txt");
         if (QFile::exists(marker)) canFlash = true;
     }
     m_flashBtn->setEnabled(canFlash);

@@ -43,6 +43,22 @@ else()
     message(FATAL_ERROR "Unsupported platform. See src/Platform.h for the interface to implement.")
 endif()
 
+# Бинарники 7za для распаковки extra.7z (по одному на платформу).
+if(WIN32)
+    set(SEVENZA_SRC "${CMAKE_SOURCE_DIR}/resources/7za/win/7za.exe")
+    set(SEVENZA_NAME "7za.exe")
+elseif(APPLE)
+    set(SEVENZA_SRC "${CMAKE_SOURCE_DIR}/resources/7za/mac/7za")
+    set(SEVENZA_NAME "7za")
+else()
+    set(SEVENZA_SRC "${CMAKE_SOURCE_DIR}/resources/7za/linux/7za")
+    set(SEVENZA_NAME "7za")
+endif()
+if(NOT EXISTS "${SEVENZA_SRC}")
+    message(FATAL_ERROR "7za binary not found: ${SEVENZA_SRC}. See resources/7za/README.")
+endif()
+configure_file("${SEVENZA_SRC}" "${CMAKE_BINARY_DIR}/7za_bin/${SEVENZA_NAME}" COPYONLY)
+
 qt_add_executable(KarabasFlasher WIN32 MACOSX_BUNDLE
     resources/resources.qrc
     src/main.cpp
@@ -60,6 +76,18 @@ qt_add_executable(KarabasFlasher WIN32 MACOSX_BUNDLE
 )
 
 target_include_directories(KarabasFlasher PRIVATE ${CMAKE_BINARY_DIR}/generated)
+
+# 7za кладётся рядом с исполняемым файлом (и внутрь .app на macOS).
+add_custom_command(TARGET KarabasFlasher POST_BUILD
+    COMMAND ${CMAKE_COMMAND} -E copy_if_different
+        "${CMAKE_BINARY_DIR}/7za_bin/${SEVENZA_NAME}"
+        "$<TARGET_FILE_DIR:KarabasFlasher>/${SEVENZA_NAME}")
+if(APPLE)
+    add_custom_command(TARGET KarabasFlasher POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            "${CMAKE_BINARY_DIR}/7za_bin/${SEVENZA_NAME}"
+            "$<TARGET_BUNDLE_CONTENT_DIR:KarabasFlasher>/MacOS/${SEVENZA_NAME}")
+endif()
 
 target_link_libraries(KarabasFlasher PRIVATE
     Qt6::Core Qt6::Gui Qt6::Widgets Qt6::Network Qt6::SerialPort)
@@ -89,6 +117,7 @@ if(APPLE)
 endif()
 
 install(TARGETS KarabasFlasher RUNTIME DESTINATION bin BUNDLE DESTINATION .)
+install(FILES "${CMAKE_BINARY_DIR}/7za_bin/${SEVENZA_NAME}" DESTINATION bin)
 
 # Linux: правило udev выдаёт доступ к порту Карабаса без группы dialout/uucp
 if(UNIX AND NOT APPLE)

@@ -3,8 +3,10 @@
 #include "Uf2.h"
 #include "Util.h"
 
+#include <QCoreApplication>
 #include <QDateTime>
 #include <QDir>
+#include <QDirIterator>
 #include <QElapsedTimer>
 #include <QEventLoop>
 #include <QFile>
@@ -32,7 +34,20 @@
 namespace {
 const qint64 kMaxTextBytes = 4 * 1024 * 1024;       // JSON / HTML
 const qint64 kMaxFileBytes = 64 * 1024 * 1024;      // прошивка / ядро
+const qint64 kMaxExtraBytes = 256 * 1024 * 1024;    // extra.7z
 const QString kCoresCompleteMarker = QStringLiteral("download_complete.txt");
+const QString kExtraCompleteMarker = QStringLiteral("extra_complete.txt");
+const QString kExtraUrl = QStringLiteral("https://github.com/xdemax/kgff/extra/extra.7z");
+
+// XOR-обфускация пароля от extra.7z. Ключ разбросан по коду, чтобы не читался
+// как строка в бинаре. Это НЕ криптографическая защита, а лишь сокрытие от
+// случайного просмотра; при необходимости заменить массив на свой.
+static const unsigned char kPwKey[] = { 0x5A, 0x13, 0xC7, 0x2E, 0x91, 0x44, 0xB8, 0x6D };
+static const unsigned char kPwData[] = {
+    // ЗАМЕНИТЬ: XOR-обфусцированный пароль. Сгенерировать можно так:
+    //   python3 -c "k=[0x5A,0x13,0xC7,0x2E,0x91,0x44,0xB8,0x6D]; p=b'YOUR_PASSWORD'; print(','.join('0x%02X'%(p[i]^k[i%len(k)]) for i in range(len(p))))"
+    0x00
+};
 
 QNetworkRequest makeRequest(const QUrl& url) {
     QNetworkRequest req(url);
@@ -77,6 +92,112 @@ bool Worker::pause(int ms) {
 
 void Worker::runDownload(const Params& p) { guarded([&]() { doDownload(p); }); }
 void Worker::runFlash(const Params& p) { guarded([&]() { doFlash(p); }); }
+
+QString Worker::sevenZaPath() const {
+    // 7za лежит рядом с исполняемым файлом (CMake копирует его при сборке).
+    const QString dir = QCoreApplication::applicationDirPath();
+#ifdef Q_OS_WIN
+    return dir + QStringLiteral("/7za.exe");
+#else
+    return dir + QStringLiteral("/7za");
+#endif
+}
+
+QByteArray Worker::extraPassword() const {
+    const int n = static_cast<int>(sizeof(kPwData));
+    QByteArray out(n, '\0');
+    for (int i = 0; i < n; ++i) {
+        out[i] = static_cast<char>(kPwData[i] ^ kPwKey[i % static_cast<int>(sizeof(kPwKey))]);
+    }
+    return out;
+}
+
+bool Worker::downloadExtraArchive(const QString& destPath) {
+    emit log(QStringLiteral("Downloading extra content archive..."));
+    QString err;
+    if (!downloadToFile(QUrl(kExtraUrl), destPath, &err)) {
+        emit log(m_cancel.load() ? QStringLiteral("Download cancelled.") : "Download error: " + err);
+        return false;
+    }
+    emit log("Successfully downloaded extra archive (" +
+             QString::number(QFileInfo(destPath).size() / 1024) + " KB).");
+    return true;
+}
+
+bool Worker::extractExtraArchive(const QString& archivePath, const QString& outDir) {
+    const QString za = sevenZaPath();
+    if (!QFileInfo::exists(za)) {
+        emit log("Error: 7za binary not found at " + za + ". Reinstall the application.");
+        return false;
+    }
+    QDir(outDir).removeRecursively();
+    if (!QDir().mkpath(outDir)) {
+        emit log("Error: Cannot create folder for extra content: " + outDir);
+        return false;
+    }
+
+    emit log(QStringLiteral("Extracting extra content..."));
+    QProcess p;
+    p.setProcessEnvironment(cleanChildEnvironment());
+    p.setProgram(za);
+    // -p без значения: 7za читает пароль из stdin (не виден в списке процессов).
+    p.setArguments(QStringList() << QStringLiteral("x") << archivePath
+                                 << QStringLiteral("-o") + outDir
+                                 << QStringLiteral("-y") << QStringLiteral("-p"));
+    p.start();
+    if (!p.waitForStarted(5000)) {
+        emit log("Error: Cannot start 7za: " + p.errorString());
+        return false;
+    }
+    QByteArray pw = extraPassword();
+    p.write(pw);
+    p.write("\n");
+    p.closeWriteChannel();
+    pw.fill('\0');
+
+    if (!p.waitForFinished(120000)) {
+        p.kill();
+        p.waitForFinished(1000);
+        emit log(QStringLiteral("Error: 7za timed out."));
+        return false;
+    }
+    if (p.exitStatus() != QProcess::NormalExit || p.exitCode() != 0) {
+        const QString err = QString::fromUtf8(p.readAllStandardError()).trimmed();
+        emit log("Error: 7za failed (code " + QString::number(p.exitCode()) + "): " + err);
+        return false;
+    }
+    emit log(QStringLiteral("Extra content extracted successfully."));
+    return true;
+}
+
+bool Worker::copyExtraToSd(const QString& srcDir, const QString& sdRoot) {
+    emit log(QStringLiteral("Copying extra content to SD card..."));
+    int copied = 0;
+    int failed = 0;
+
+    QDirIterator it(srcDir, QDir::Files | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+    while (it.hasNext()) {
+        const QString src = it.next();
+        const QString rel = QDir(srcDir).relativeFilePath(src);
+        const QString dst = QDir::cleanPath(sdRoot + QLatin1Char('/') + rel);
+        const QString dstDir = QFileInfo(dst).absolutePath();
+        if (!QDir().mkpath(dstDir)) {
+            emit log("Warning: Cannot create folder " + dstDir);
+            ++failed;
+            continue;
+        }
+        QString e;
+        if (!copyFileSynced(src, dst, &e)) {
+            emit log("Warning: Failed to copy " + rel + ": " + e);
+            ++failed;
+            continue;
+        }
+        ++copied;
+    }
+    emit log("Extra content copied: " + QString::number(copied) + " files" +
+             (failed > 0 ? ", " + QString::number(failed) + " failed" : QString()) + ".");
+    return failed == 0;
+}
 
 void Worker::runMsc(const Params& p) { guarded([&]() { doOpenSd(p); }); }
 
@@ -433,8 +554,9 @@ void Worker::doDownload(const Params& p) {
     }
     const ModelInfo& m = models().at(p.modelIndex);
 
-    if (!p.updateFirmware && !p.updateCores) {
-        emit log(QStringLiteral("Nothing to download: check 'Update firmware' and/or 'Update cores'."));
+    if (!p.updateFirmware && !p.updateCores && !p.updateExtra) {
+        emit log(QStringLiteral("Nothing to download: check 'Update firmware', 'Update cores' and/or "
+                                "'Download extra content'."));
         return;
     }
 
@@ -468,6 +590,24 @@ void Worker::doDownload(const Params& p) {
                  QString::number(fwTimer.elapsed() / 1000.0, 'f', 1) + " s). Path: " + destFile);
     } else {
         emit log(QStringLiteral("Skipping firmware download because 'Update firmware' is unchecked."));
+    }
+
+    if (p.updateExtra) {
+        const QString extraDir = wd + QStringLiteral("/extra");
+        if (!QDir().mkpath(extraDir)) {
+            emit log("Error: Cannot create folder for extra content: " + extraDir);
+            return;
+        }
+        const QString archive = extraDir + QStringLiteral("/extra.7z");
+        const QString filesDir = extraDir + QStringLiteral("/files");
+        if (!downloadExtraArchive(archive)) return;
+        if (!extractExtraArchive(archive, filesDir)) return;
+        QFile marker(extraDir + "/" + kExtraCompleteMarker);
+        if (!marker.open(QIODevice::WriteOnly)) {
+            emit log("Warning: Could not create the extra completion marker (" + marker.errorString() + ").");
+        }
+    } else {
+        emit log(QStringLiteral("Skipping extra content download because 'Download extra content' is unchecked."));
     }
 
     if (!p.updateCores) {
@@ -907,6 +1047,13 @@ bool Worker::updateCoresOnSd(const ModelInfo& m, const QString& portLocation,
         emit log("Warning: Could not remove the empty backup folder: " + backupDir);
     }
 
+    // Extra content копируется в том же MSC-сеансе, после ядер.
+    const QString extraFilesDir = workDir() + QStringLiteral("/extra/files");
+    if (QFile::exists(workDir() + QStringLiteral("/extra/") + kExtraCompleteMarker) &&
+        QFileInfo(extraFilesDir).isDir()) {
+        copyExtraToSd(extraFilesDir, root);
+    }
+
     // Служебные файлы ОС (macOS: "._*") удаляем ДО извлечения карты
     {
         QStringList extraDirs;
@@ -934,8 +1081,9 @@ bool Worker::updateCoresOnSd(const ModelInfo& m, const QString& portLocation,
 // ----------------------------------------------------------------------------
 void Worker::doFlash(const Params& p) {
     // --- Предварительные проверки: ДО любых действий с SD-картой и устройством ---
-    if (!p.updateFirmware && !p.updateCores) {
-        emit log(QStringLiteral("Error: Nothing to do. Check 'Update firmware' and/or 'Update cores'."));
+    if (!p.updateFirmware && !p.updateCores && !p.updateExtra) {
+        emit log(QStringLiteral("Error: Nothing to do. Check 'Update firmware', 'Update cores' and/or "
+                                "'Download extra content'."));
         return;
     }
     if (p.updateFirmware) {
@@ -950,30 +1098,74 @@ void Worker::doFlash(const Params& p) {
         }
     }
 
-    if (p.updateCores) {
-        if (p.modelIndex < 0 || p.modelIndex >= models().size()) {
-            emit log(QStringLiteral("Error: Unknown device model selected."));
-            return;
+    if (p.updateCores || p.updateExtra) {
+        if (p.updateCores) {
+            if (p.modelIndex < 0 || p.modelIndex >= models().size()) {
+                emit log(QStringLiteral("Error: Unknown device model selected."));
+                return;
+            }
         }
-        const ModelInfo& m = models().at(p.modelIndex);
         if (p.portLocation.isEmpty()) {
-            emit log(QStringLiteral("Error: Updating cores requires a serial port (to send the MSC command)."));
+            emit log(QStringLiteral("Error: Updating cores/extra requires a serial port (to send the MSC command)."));
             return;
         }
         const QString coresDir = workDir() + QStringLiteral("/cores");
-        if (!QFile::exists(coresDir + "/" + kCoresCompleteMarker)) {
-            emit log(QStringLiteral("Error: No complete set of downloaded cores found. Check 'Update cores' and "
-                                    "press 'Download via GitHub' first."));
-            return;
+        const QString extraDir = workDir() + QStringLiteral("/extra");
+        const QString extraFilesDir = extraDir + QStringLiteral("/files");
+        QStringList newCores;
+        if (p.updateCores) {
+            const ModelInfo& m = models().at(p.modelIndex);
+            if (!QFile::exists(coresDir + "/" + kCoresCompleteMarker)) {
+                emit log(QStringLiteral("Error: No complete set of downloaded cores found. Check 'Update cores' and "
+                                        "press 'Download via GitHub' first."));
+                return;
+            }
+            newCores = listFilesWithExt(coresDir, m.ext);
+            if (newCores.isEmpty()) {
+                emit log("Error: No downloaded core files (" + m.ext +
+                         ") for the selected model. Press 'Download via GitHub' first.");
+                return;
+            }
         }
-        const QStringList newCores = listFilesWithExt(coresDir, m.ext);
-        if (newCores.isEmpty()) {
-            emit log("Error: No downloaded core files (" + m.ext +
-                     ") for the selected model. Press 'Download via GitHub' first.");
-            return;
+        if (p.updateExtra) {
+            if (!QFile::exists(extraDir + "/" + kExtraCompleteMarker) || !QFileInfo(extraFilesDir).isDir()) {
+                emit log(QStringLiteral("Error: No downloaded extra content found. Check 'Download extra content' "
+                                        "and press 'Download via GitHub' first."));
+                return;
+            }
         }
 
-        if (!updateCoresOnSd(m, p.portLocation, newCores)) return;
+        // Один MSC-сеанс: сначала ядра, затем extra (обе операции на карте №1).
+        if (p.updateCores) {
+            const ModelInfo& m = models().at(p.modelIndex);
+            if (!updateCoresOnSd(m, p.portLocation, newCores)) return;
+        } else {
+            // Только extra: открываем MSC и копируем.
+            emit log(QStringLiteral("Switching Karabas to SD Card MSC mode (card 1) for extra content..."));
+            const QSet<QString> before = Platform::readyRemovableDisks();
+            if (!sendMscCommand(p.portLocation, 1)) {
+                emit log(QStringLiteral("Error: Could not switch the device to MSC mode. Aborting."));
+                return;
+            }
+            emit log(QStringLiteral("Waiting for SD Card storage drive to mount..."));
+            Platform::Candidate sd;
+            if (!waitForMountedVolume([&before]() { return Platform::newDisks(before); }, 40000, &sd)) {
+                if (m_cancel.load()) {
+                    emit log(QStringLiteral("Operation cancelled by user. The device may stay in MSC mode - replug it."));
+                } else {
+                    emit log(QStringLiteral("Error: SD card storage drive not detected after switching mode."));
+                    emit log(Platform::diagnostics());
+                }
+                return;
+            }
+            emit log("Found SD Card drive: " + sd.mountPoint + " [" + sd.label + "] (" + sd.node + ")");
+            copyExtraToSd(extraFilesDir, sd.mountPoint);
+            emit log(QStringLiteral("Ejecting SD Card drive from system..."));
+            if (!ejectBestEffort(sd)) {
+                emit log(QStringLiteral("Error: The SD card could not be ejected. Replug the Karabas."));
+                return;
+            }
+        }
 
         emit log(QStringLiteral("Waiting for device to become available as a serial port again..."));
         bool portFound = false;
@@ -985,11 +1177,10 @@ void Worker::doFlash(const Params& p) {
             portFound = isPortPresent(p.portLocation);
         }
         if (!p.updateFirmware) {
-            // Только ядра: после извлечения карты плата сама вернулась в обычный режим
             if (portFound) {
-                emit log(QStringLiteral("Process completed successfully. The cores are updated and the device is back in normal mode."));
+                emit log(QStringLiteral("Process completed successfully. The device is back in normal mode."));
             } else {
-                emit log(QStringLiteral("Warning: The cores are updated, but the device port was not detected again. "
+                emit log(QStringLiteral("Warning: The operation is complete, but the device port was not detected again. "
                                         "Replug the device if it does not respond."));
             }
             return;

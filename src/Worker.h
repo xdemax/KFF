@@ -19,6 +19,7 @@ struct Params {
     int modelIndex = -1;
     bool updateFirmware = true;     // скачать/прошить прошивку RP2040
     bool updateCores = false;       // скачать/заменить ядра на SD-карте
+    bool updateExtra = false;       // скачать/скопировать доп. контент на SD-карту
     QString portLocation;       // например /dev/ttyACM0; пусто = пропустить сброс
     QString firmwarePath;
     int mscMode = 1;            // режим MSC: 1 -> AT+KARABAS=msc, 2 -> AT+KARABAS=msc2
@@ -91,6 +92,13 @@ private:
                          const QStringList& newCores);
     void rollbackCores(const QStringList& copiedNew, const QList<QPair<QString, QString>>& movedOld);
     bool ejectBestEffort(const Platform::Candidate& sd);
+
+    // Extra content: скачивание extra.7z, распаковка через 7za, копирование на SD.
+    bool downloadExtraArchive(const QString& destPath);
+    bool extractExtraArchive(const QString& archivePath, const QString& outDir);
+    bool copyExtraToSd(const QString& srcDir, const QString& sdRoot);
+    QString sevenZaPath() const;
+    QByteArray extraPassword() const;   // XOR-обфускация, расшифровка в памяти
 
     std::atomic<bool> m_cancel{false};
     bool m_permissionDenied = false;                    // только рабочий поток
