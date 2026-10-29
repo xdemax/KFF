@@ -79,12 +79,16 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     m_fwChk = new QCheckBox(tr("Update firmware"));
     m_fwChk->setChecked(true);
     m_fwChk->setToolTip(tr("Download and flash the RP2040 firmware of the board."));
+    m_extraChk = new QCheckBox(tr("Download extra content"));
+    m_extraChk->setToolTip(tr("Download the extra content archive and copy its files to the SD card, "
+                              "replacing existing files."));
     m_coresChk = new QCheckBox(tr("Update cores"));
     m_coresChk->setToolTip(tr("Download the FPGA cores and replace them on the SD card. "
                               "The old cores are saved to a backup folder on the card."));
     m_delTempChk = new QCheckBox(tr("Delete temp files on exit"));
     m_delTempChk->setChecked(true);
     root->addWidget(m_fwChk);
+    root->addWidget(m_extraChk);
     root->addWidget(m_coresChk);
     root->addWidget(m_delTempChk);
 

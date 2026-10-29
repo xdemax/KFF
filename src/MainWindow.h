@@ -52,6 +52,7 @@ private:
     QPushButton* m_detectBtn = nullptr;    // кнопка-лупа: автоопределение модели
     QPushButton* m_downloadBtn = nullptr;
     QCheckBox* m_fwChk = nullptr;
+    QCheckBox* m_extraChk = nullptr;      // скачать доп. контент и скопировать на карту
     QCheckBox* m_coresChk = nullptr;
     QCheckBox* m_delTempChk = nullptr;
     QLineEdit* m_pathEdit = nullptr;
