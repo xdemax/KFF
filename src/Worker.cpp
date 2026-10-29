@@ -19,6 +19,7 @@
 #include <QRegularExpression>
 #include <QSaveFile>
 #include <QSerialPort>
+#include <QSet>
 #include <QStorageInfo>
 #include <QSerialPortInfo>
 #include <QThread>
@@ -734,9 +735,15 @@ bool Worker::updateCoresOnSd(const ModelInfo& m, const QString& portLocation,
     }
     emit log("Success: Created backup folder: " + backupDir);
 
-    // 1) Бэкап старых ядер
-    emit log("Moving existing cores (" + m.ext + ") from SD root to backup folder...");
-    const QStringList oldCores = listFilesWithExt(root, m.ext);
+    // 1) Бэкап старых ядер. Переносим только те файлы, которые входят в релизный набор
+    // (совпадают по имени с newCores); пользовательские/тестовые ядра не трогаем.
+    emit log("Moving existing release cores (" + m.ext + ") from SD root to backup folder...");
+    QSet<QString> releaseNames;
+    for (const QString& src : newCores) releaseNames.insert(QFileInfo(src).fileName());
+    QStringList oldCores;
+    for (const QString& f : listFilesWithExt(root, m.ext)) {
+        if (releaseNames.contains(QFileInfo(f).fileName())) oldCores << f;
+    }
     QList<QPair<QString, QString>> movedOld;
     bool moveFailed = false;
     for (const QString& src : oldCores) {
