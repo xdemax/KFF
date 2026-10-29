@@ -31,6 +31,8 @@ private slots:
     void onRefreshPorts();
     void onFlash();
     void onMsc();
+    void onDetectModel();
+    void onModelDetected(int modelIndex, const QString& raw);
     void appendLog(const QString& message);
     void onFirmwareReady(const QString& path);
     void onWorkerFinished();
@@ -47,6 +49,7 @@ private:
     void stopThread();
 
     QComboBox* m_modelCombo = nullptr;
+    QPushButton* m_detectBtn = nullptr;    // кнопка-лупа: автоопределение модели
     QPushButton* m_downloadBtn = nullptr;
     QCheckBox* m_fwChk = nullptr;
     QCheckBox* m_coresChk = nullptr;

@@ -37,6 +37,7 @@ public:
     void runDownload(const Params& p);
     void runFlash(const Params& p);
     void runMsc(const Params& p);
+    void runDetectModel(const Params& p);
 
 signals:
     void log(const QString& message);
@@ -44,6 +45,7 @@ signals:
     void finished();                                    // операция завершена (успешно или нет)
     void portAccessDenied(const QString& portLocation); // нет прав на порт (Linux)
     void openFolder(const QString& path);               // открыть папку в файловом менеджере
+    void modelDetected(int modelIndex, const QString& raw); // ответ на AT+KARABAS=version
 
 private:
     struct HttpResult {
@@ -79,6 +81,7 @@ private:
     void doOpenSd(const Params& p);
 
     bool sendMscCommand(const QString& portLocation, int mscMode);
+    bool queryVersion(const QString& portLocation, QString* raw, int* board);
     bool resetPortToBootloader(const QString& portLocation);
     bool isPortPresent(const QString& portLocation);
 

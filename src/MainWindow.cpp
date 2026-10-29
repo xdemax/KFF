@@ -44,9 +44,15 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     root->addWidget(new QLabel(tr("Select Device Model:")));
     auto* row1 = new QHBoxLayout;
     m_modelCombo = new QComboBox;
+    m_modelCombo->setMinimumHeight(28);
+    m_modelCombo->setMaximumHeight(28);
     for (const ModelInfo& m : models()) m_modelCombo->addItem(m.name);
+    m_detectBtn = new QPushButton(QStringLiteral("\xF0\x9F\x94\x8D"));   // 🔍
+    m_detectBtn->setFixedSize(32, 28);
+    m_detectBtn->setToolTip(tr("Automatic model detection (AT+KARABAS=version)"));
     m_downloadBtn = new QPushButton(tr("Download via GitHub"));
     row1->addWidget(m_modelCombo, 1);
+    row1->addWidget(m_detectBtn, 0);
     row1->addWidget(m_downloadBtn);
     root->addLayout(row1);
 
@@ -156,6 +162,8 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     connect(m_refreshBtn, &QPushButton::clicked, this, &MainWindow::onRefreshPorts);
     connect(m_flashBtn, &QPushButton::clicked, this, &MainWindow::onFlash);
     connect(m_mscBtn, &QPushButton::clicked, this, &MainWindow::onMsc);
+    connect(m_detectBtn, &QPushButton::clicked, this, &MainWindow::onDetectModel);
+    connect(m_worker, &Worker::modelDetected, this, &MainWindow::onModelDetected);
     connect(m_comCombo, &QComboBox::currentIndexChanged, this, [this](int) { updateActionState(); });
     connect(m_modelCombo, &QComboBox::currentIndexChanged, this, [this](int idx) {
         // Прошивка привязана к модели: при смене модели сбрасываем путь, чтобы
@@ -244,7 +252,8 @@ void MainWindow::setBusy(bool busy) {
                        static_cast<QWidget*>(m_browseBtn), static_cast<QWidget*>(m_comCombo),
                        static_cast<QWidget*>(m_refreshBtn), static_cast<QWidget*>(m_flashBtn),
                        static_cast<QWidget*>(m_mscBtn), static_cast<QWidget*>(m_mscMode1Btn),
-                       static_cast<QWidget*>(m_mscMode2Btn), static_cast<QWidget*>(m_mscHelp)}) {
+                       static_cast<QWidget*>(m_mscMode2Btn), static_cast<QWidget*>(m_mscHelp),
+                       static_cast<QWidget*>(m_detectBtn)}) {
         w->setEnabled(en);
     }
     if (en) m_downloadBtn->setText(tr("Download via GitHub"));
@@ -301,6 +310,21 @@ void MainWindow::onMsc() {
     const Params p = collectParams();
     m_worker->clearCancel();        // сброс в GUI-потоке до постановки задачи в очередь
     QMetaObject::invokeMethod(m_worker, [w = m_worker, p]() { w->runMsc(p); }, Qt::QueuedConnection);
+}
+
+void MainWindow::onDetectModel() {
+    if (m_busy) return;
+    setBusy(true);
+    const Params p = collectParams();
+    m_worker->clearCancel();
+    QMetaObject::invokeMethod(m_worker, [w = m_worker, p]() { w->runDetectModel(p); }, Qt::QueuedConnection);
+}
+
+void MainWindow::onModelDetected(int modelIndex, const QString& raw) {
+    if (modelIndex >= 0 && modelIndex < m_modelCombo->count()) {
+        m_modelCombo->setCurrentIndex(modelIndex);
+    }
+    appendLog("Detected device: " + raw);
 }
 
 void MainWindow::onBrowse() {

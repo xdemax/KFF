@@ -80,6 +80,34 @@ void Worker::runFlash(const Params& p) { guarded([&]() { doFlash(p); }); }
 
 void Worker::runMsc(const Params& p) { guarded([&]() { doOpenSd(p); }); }
 
+void Worker::runDetectModel(const Params& p) {
+    guarded([&]() {
+        if (p.portLocation.isEmpty()) {
+            emit log(QStringLiteral("Error: Please select an active serial port first."));
+            return;
+        }
+        QString raw;
+        int board = 0;
+        if (!queryVersion(p.portLocation, &raw, &board)) return;
+
+        emit log("Device version: " + raw);
+        int modelIndex = -1;
+        switch (board) {
+        case 1: modelIndex = 0; break;      // Karabas Go
+        case 2: modelIndex = 1; break;      // Karabas Go Mini rev A-F
+        case 3: modelIndex = 2; break;      // Karabas Go Mini rev G
+        default: break;
+        }
+        if (modelIndex < 0) {
+            emit log("Warning: Unknown board id " + QString::number(board) +
+                     " in the version response. Model was not changed.");
+            return;
+        }
+        emit log("Detected model: " + models().at(modelIndex).name);
+        emit modelDetected(modelIndex, raw);
+    });
+}
+
 // Кнопка «Open SD card in explorer»: режим MSC, ожидание диска, открытие папки карты.
 void Worker::doOpenSd(const Params& p) {
     if (p.portLocation.isEmpty()) {
@@ -577,6 +605,75 @@ bool Worker::sendMscCommand(const QString& portLocation, int mscMode) {
             emit log("Device response: " + text);
         }
     }
+    return true;
+}
+
+// Запрос версии: AT+KARABAS=version -> +KARABAS:<firmware>;<board>;<core id>;<core build>
+bool Worker::queryVersion(const QString& portLocation, QString* raw, int* board) {
+    emit log("Sending AT+KARABAS=version command to " + portLocation + "...");
+
+    QSerialPort sp;
+    sp.setPortName(portLocation);
+    sp.setBaudRate(QSerialPort::Baud115200);
+    sp.setDataBits(QSerialPort::Data8);
+    sp.setParity(QSerialPort::NoParity);
+    sp.setStopBits(QSerialPort::OneStop);
+    sp.setFlowControl(QSerialPort::NoFlowControl);
+
+    if (!sp.open(QIODevice::ReadWrite)) {
+        QString msg = "Error: Failed to open " + portLocation + ": " + sp.errorString() + ".";
+#if defined(Q_OS_LINUX)
+        if (sp.error() == QSerialPort::PermissionError) {
+            msg += " No permission to access the port.";
+            m_permissionDenied = true;
+        }
+#endif
+        emit log(msg);
+        if (m_permissionDenied) emit portAccessDenied(portLocation);
+        return false;
+    }
+
+    const QByteArray cmd("AT+KARABAS=version\r\n");
+    if (sp.write(cmd) != cmd.size() || !sp.waitForBytesWritten(2000)) {
+        emit log(QStringLiteral("Error: Failed to write data to the serial port."));
+        return false;
+    }
+
+    // Ждём ответ до 2 секунд, накапливая данные
+    QByteArray resp;
+    QElapsedTimer timer;
+    timer.start();
+    while (timer.elapsed() < 2000) {
+        if (m_cancel.load()) {
+            emit log(QStringLiteral("Operation cancelled by user."));
+            return false;
+        }
+        if (sp.waitForReadyRead(200)) resp += sp.readAll();
+        if (resp.contains("+KARABAS:")) {
+            // дочитываем остаток строки
+            while (sp.waitForReadyRead(100)) resp += sp.readAll();
+            break;
+        }
+    }
+
+    const QString text = QString::fromUtf8(resp).trimmed();
+    if (text.isEmpty()) {
+        emit log(QStringLiteral("Error: No response from the device to AT+KARABAS=version."));
+        return false;
+    }
+    if (text.contains(QStringLiteral("ERROR"), Qt::CaseInsensitive)) {
+        emit log("Error: The device rejected the version command: " + text);
+        return false;
+    }
+
+    static const QRegularExpression re(QStringLiteral("\\+KARABAS:([^;\\r\\n]*);(\\d+);([^;\\r\\n]*);([^\\r\\n]*)"));
+    const QRegularExpressionMatch m = re.match(text);
+    if (!m.hasMatch()) {
+        emit log("Error: Unexpected version response: " + text);
+        return false;
+    }
+    if (raw) *raw = m.captured(0).trimmed();
+    if (board) *board = m.captured(2).toInt();
     return true;
 }
 
