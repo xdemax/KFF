@@ -96,10 +96,10 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     chkGrid->setContentsMargins(0, 0, 0, 0);
     chkGrid->setHorizontalSpacing(16);
     chkGrid->setVerticalSpacing(4);
-    chkGrid->addWidget(m_fwChk, 0, 0);
-    chkGrid->addWidget(m_extraChk, 0, 1);
-    chkGrid->addWidget(m_coresChk, 1, 0);
-    chkGrid->addWidget(m_delTempChk, 1, 1);
+    chkGrid->addWidget(m_fwChk, 0, 0, Qt::AlignLeft);
+    chkGrid->addWidget(m_extraChk, 0, 1, Qt::AlignRight);
+    chkGrid->addWidget(m_coresChk, 1, 0, Qt::AlignLeft);
+    chkGrid->addWidget(m_delTempChk, 1, 1, Qt::AlignRight);
     chkGrid->setColumnStretch(0, 1);
     chkGrid->setColumnStretch(1, 1);
     root->addLayout(chkGrid);
