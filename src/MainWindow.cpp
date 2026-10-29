@@ -52,7 +52,7 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     for (const ModelInfo& m : models()) m_modelCombo->addItem(m.name);
     m_detectBtn = new QPushButton;
     m_detectBtn->setFixedSize(32, 28);
-    m_detectBtn->setToolTip(tr("Automatic model detection (AT+KARABAS=version)"));
+    m_detectBtn->setToolTip(tr("Automatic model detection"));
     // Иконка лупы рисуется вручную: эмодзи 🔍 есть не во всех шрифтах (на Linux вместо него
     // появляются «кракозябры»), а QStyle-иконки на разных платформах выглядят по-разному.
     {
