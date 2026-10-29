@@ -12,6 +12,7 @@
 #include <QDateTime>
 #include <QDir>
 #include <QFileDialog>
+#include <QGridLayout>
 #include <QHBoxLayout>
 #include <QIcon>
 #include <QLabel>
@@ -87,10 +88,18 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
                               "The old cores are saved to a backup folder on the card."));
     m_delTempChk = new QCheckBox(tr("Delete temp files on exit"));
     m_delTempChk->setChecked(true);
-    root->addWidget(m_fwChk);
-    root->addWidget(m_extraChk);
-    root->addWidget(m_coresChk);
-    root->addWidget(m_delTempChk);
+    // Чекбоксы в две колонки: 2x2
+    auto* chkGrid = new QGridLayout;
+    chkGrid->setContentsMargins(0, 0, 0, 0);
+    chkGrid->setHorizontalSpacing(16);
+    chkGrid->setVerticalSpacing(4);
+    chkGrid->addWidget(m_fwChk, 0, 0);
+    chkGrid->addWidget(m_extraChk, 0, 1);
+    chkGrid->addWidget(m_coresChk, 1, 0);
+    chkGrid->addWidget(m_delTempChk, 1, 1);
+    chkGrid->setColumnStretch(0, 1);
+    chkGrid->setColumnStretch(1, 1);
+    root->addLayout(chkGrid);
 
     root->addWidget(new QLabel(tr("Firmware File Path (.uf2):")));
     auto* row2 = new QHBoxLayout;
