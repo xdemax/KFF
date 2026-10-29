@@ -40,9 +40,6 @@ const QString kCoresCompleteMarker = QStringLiteral("download_complete.txt");
 const QString kExtraCompleteMarker = QStringLiteral("extra_complete.txt");
 const QString kExtraUrl = QStringLiteral("https://raw.githubusercontent.com/xdemax/kgff/refs/heads/main/extra/extra.7z");
 
-// XOR-обфускация пароля от extra.7z. Ключ разбросан по коду, чтобы не читался
-// как строка в бинаре. Это НЕ криптографическая защита, а лишь сокрытие от
-// случайного просмотра; при необходимости заменить массив на свой.
 static const unsigned char kPwKey[] = { 0x5A, 0x13, 0xC7, 0x2E, 0x91, 0x44, 0xB8, 0x6D };
 static const unsigned char kPwData[] = {
     0x09, 0x7F, 0xA4, 0x4F, 0xE2, 0x2D, 0xDA, 0x0E,
