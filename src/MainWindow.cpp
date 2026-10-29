@@ -72,6 +72,9 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
         m_detectBtn->setIconSize(QSize(16, 16));
     }
     m_downloadBtn = new QPushButton(tr("Download via GitHub"));
+    // Ширина правых кнопок (Browse..., Refresh ports) подгоняется под "Download via GitHub",
+    // чтобы правый край всех строк выглядел ровно.
+    const int rightBtnWidth = m_downloadBtn->sizeHint().width();
     row1->addWidget(m_modelCombo, 1);
     row1->addWidget(m_detectBtn, 0);
     row1->addWidget(m_downloadBtn);
@@ -106,6 +109,7 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     m_pathEdit = new QLineEdit;
     m_pathEdit->setReadOnly(true);
     m_browseBtn = new QPushButton(tr("Browse..."));
+    m_browseBtn->setMinimumWidth(rightBtnWidth);
     row2->addWidget(m_pathEdit, 1);
     row2->addWidget(m_browseBtn);
     root->addLayout(row2);
@@ -114,6 +118,7 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     auto* row3 = new QHBoxLayout;
     m_comCombo = new QComboBox;
     m_refreshBtn = new QPushButton(tr("Refresh ports"));
+    m_refreshBtn->setMinimumWidth(rightBtnWidth);
     row3->addWidget(m_comCombo, 1);
     row3->addWidget(m_refreshBtn);
     root->addLayout(row3);
