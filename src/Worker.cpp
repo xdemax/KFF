@@ -38,7 +38,7 @@ const qint64 kMaxFileBytes = 64 * 1024 * 1024;      // прошивка / ядр
 const qint64 kMaxExtraBytes = 256 * 1024 * 1024;    // extra.7z
 const QString kCoresCompleteMarker = QStringLiteral("download_complete.txt");
 const QString kExtraCompleteMarker = QStringLiteral("extra_complete.txt");
-const QString kExtraUrl = QStringLiteral("https://github.com/xdemax/kgff/extra/extra.7z");
+const QString kExtraUrl = QStringLiteral("https://raw.githubusercontent.com/xdemax/kgff/extra/extra.7z");
 
 // XOR-обфускация пароля от extra.7z. Ключ разбросан по коду, чтобы не читался
 // как строка в бинаре. Это НЕ криптографическая защита, а лишь сокрытие от
