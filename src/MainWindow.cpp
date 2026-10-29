@@ -341,10 +341,10 @@ void MainWindow::onDetectModel() {
 }
 
 void MainWindow::onModelDetected(int modelIndex, const QString& raw) {
+    Q_UNUSED(raw);      // ответ уже выведен в журнал рабочим потоком
     if (modelIndex >= 0 && modelIndex < m_modelCombo->count()) {
         m_modelCombo->setCurrentIndex(modelIndex);
     }
-    appendLog("Detected device: " + raw);
 }
 
 void MainWindow::onBrowse() {
