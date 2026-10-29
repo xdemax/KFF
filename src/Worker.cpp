@@ -116,7 +116,7 @@ QByteArray Worker::extraPassword() const {
 bool Worker::downloadExtraArchive(const QString& destPath) {
     emit log(QStringLiteral("Downloading extra content archive..."));
     QString err;
-    if (!downloadToFile(QUrl(kExtraUrl), destPath, &err)) {
+    if (!downloadToFile(QUrl(kExtraUrl), destPath, &err, kMaxExtraBytes)) {
         emit log(m_cancel.load() ? QStringLiteral("Download cancelled.") : "Download error: " + err);
         return false;
     }
@@ -165,6 +165,13 @@ bool Worker::extractExtraArchive(const QString& archivePath, const QString& outD
     if (p.exitStatus() != QProcess::NormalExit || p.exitCode() != 0) {
         const QString err = QString::fromUtf8(p.readAllStandardError()).trimmed();
         emit log("Error: 7za failed (code " + QString::number(p.exitCode()) + "): " + err);
+        return false;
+    }
+    // Проверяем, что распаковка дала хоть какие-то файлы (пустой архив или неверный пароль
+    // могут завершиться с кодом 0, но без файлов).
+    const QDirIterator check(outDir, QDir::Files | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
+    if (!check.hasNext()) {
+        emit log(QStringLiteral("Error: The extra archive is empty or the password is incorrect."));
         return false;
     }
     emit log(QStringLiteral("Extra content extracted successfully."));
@@ -326,13 +333,13 @@ Worker::HttpResult Worker::httpFetch(const QUrl& url, qint64 maxBytes, QSaveFile
     return r;
 }
 
-bool Worker::downloadToFile(const QUrl& url, const QString& dest, QString* err) {
+bool Worker::downloadToFile(const QUrl& url, const QString& dest, QString* err, qint64 maxBytes) {
     QSaveFile f(dest);                       // запись во временный файл + атомарная замена
     if (!f.open(QIODevice::WriteOnly)) {
         if (err) *err = "cannot create file: " + f.errorString();
         return false;
     }
-    const HttpResult r = httpFetch(url, kMaxFileBytes, &f);
+    const HttpResult r = httpFetch(url, maxBytes, &f);
     if (!r.ok) {
         f.cancelWriting();
         if (err) *err = r.error;
@@ -1053,7 +1060,9 @@ bool Worker::updateCoresOnSd(const ModelInfo& m, const QString& portLocation,
     const QString extraFilesDir = workDir() + QStringLiteral("/extra/files");
     if (QFile::exists(workDir() + QStringLiteral("/extra/") + kExtraCompleteMarker) &&
         QFileInfo(extraFilesDir).isDir()) {
-        copyExtraToSd(extraFilesDir, root);
+        if (!copyExtraToSd(extraFilesDir, root)) {
+            emit log(QStringLiteral("Warning: Some extra content files could not be copied."));
+        }
     }
 
     // Служебные файлы ОС (macOS: "._*") удаляем ДО извлечения карты
@@ -1161,7 +1170,9 @@ void Worker::doFlash(const Params& p) {
                 return;
             }
             emit log("Found SD Card drive: " + sd.mountPoint + " [" + sd.label + "] (" + sd.node + ")");
-            copyExtraToSd(extraFilesDir, sd.mountPoint);
+            if (!copyExtraToSd(extraFilesDir, sd.mountPoint)) {
+                emit log(QStringLiteral("Warning: Some extra content files could not be copied."));
+            }
             emit log(QStringLiteral("Ejecting SD Card drive from system..."));
             if (!ejectBestEffort(sd)) {
                 emit log(QStringLiteral("Error: The SD card could not be ejected. Replug the Karabas."));

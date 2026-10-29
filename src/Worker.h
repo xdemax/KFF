@@ -71,7 +71,8 @@ private:
     bool pause(int ms);                                 // false, если запрошена отмена
 
     HttpResult httpFetch(const QUrl& url, qint64 maxBytes, QSaveFile* file);
-    bool downloadToFile(const QUrl& url, const QString& dest, QString* err);
+    bool downloadToFile(const QUrl& url, const QString& dest, QString* err,
+                        qint64 maxBytes = 64 * 1024 * 1024);
     // Параллельная загрузка нескольких файлов через ОДИН QNetworkAccessManager
     // (общее соединение, до maxParallel файлов одновременно).
     QList<JobResult> downloadFiles(const QList<DownloadJob>& jobs, int maxParallel);
