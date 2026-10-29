@@ -30,7 +30,8 @@
 ## Как пользоваться
 
 1. Подключите Karabas к компьютеру кабелем USB.
-2. Выберите свою модель в списке **Select Device Model**.
+2. Выберите свою модель в списке **Select Device Model** или нажмите кнопку с лупой — программа сама
+   спросит у платы версию (`AT+KARABAS=version`) и выберет нужную модель.
 3. Отметьте, что нужно обновить:
    - **Update firmware**: прошивка платы (включено по умолчанию);
    - **Update cores**: ядра на SD-карте.
@@ -44,6 +45,13 @@
 6. Нажмите **FLASH!** и дождитесь в журнале строки «Process completed successfully».
 
 Во время работы не отключайте плату и не закрывайте окно. Если окно всё же закрыть, программа спросит подтверждение и остановится в безопасный момент.
+
+### Автоопределение модели
+
+Кнопка с лупой рядом со списком моделей отправляет плате команду `AT+KARABAS=version` и ждёт ответ
+до двух секунд. Ответ имеет вид `+KARABAS:<firmware>;<board>;<core id>;<core build>`, где `board` —
+идентификатор платы: `1` — Karabas Go, `2` — Karabas Go Mini rev A-F, `3` — Karabas Go Mini rev G.
+Полученный ответ выводится в журнал, а в списке моделей автоматически выбирается нужная.
 
 ### Работа с SD-картой вручную
 
@@ -137,7 +145,8 @@ Firmware and cores can be updated together or separately — for example, cores 
 ### How to use
 
 1. Connect the Karabas to your computer with a USB cable.
-2. Select your model in the **Select Device Model** list.
+2. Select your model in the **Select Device Model** list, or click the magnifier button — the program will
+   query the board version (`AT+KARABAS=version`) and pick the right model automatically.
 3. Check what you want to update:
    - **Update firmware**: board firmware (enabled by default);
    - **Update cores**: cores on the SD card.
@@ -152,6 +161,13 @@ Firmware and cores can be updated together or separately — for example, cores 
 
 Do not disconnect the board or close the window while an operation is in progress. If you do close the window,
 the program will ask for confirmation and stop at a safe point.
+
+### Automatic model detection
+
+The magnifier button next to the model list sends the `AT+KARABAS=version` command to the board and waits
+up to two seconds for a reply. The reply has the form `+KARABAS:<firmware>;<board>;<core id>;<core build>`,
+where `board` is the board identifier: `1` — Karabas Go, `2` — Karabas Go Mini rev A-F, `3` — Karabas Go Mini rev G.
+The reply is written to the log, and the matching model is selected in the list automatically.
 
 ### Working with the SD card manually
 
