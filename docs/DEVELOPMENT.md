@@ -48,6 +48,12 @@
 
 Нужны CMake, компилятор C++17 и Qt 6 с модулями Base и SerialPort.
 
+Бинарник `7za` для упаковки входит в репозиторий: `resources/7za/linux/7za`,
+`resources/7za/mac/7za`, `resources/7za/win/7za.exe`. CMake проверяет наличие
+файла для текущей ОС при конфигурации и падает с `7za binary not found`, если
+его нет. При обновлении 7-Zip заменяйте файлы во всех трёх каталогах и
+сохраняйте бит исполнения (`chmod +x resources/7za/linux/7za resources/7za/mac/7za`).
+
 ### Linux
 
 Debian / Ubuntu:

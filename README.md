@@ -110,6 +110,7 @@
 ## Для разработчиков
 
 Сборка из исходников, устройство проекта, релизы: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). История версий: [CHANGELOG.md](CHANGELOG.md).
+Бинарники `7za` для всех трёх платформ входят в репозиторий (`resources/7za/`), отдельно скачивать их не нужно.
 
 ## Лицензия
 
@@ -227,6 +228,7 @@ Package details: [docs/DEPENDENCIES_linux.txt](docs/DEPENDENCIES_linux.txt).
 ### For developers
 
 Building from source, project structure, releases: [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md). Version history: [CHANGELOG.md](CHANGELOG.md).
+The `7za` binaries for all three platforms are bundled in the repository (`resources/7za/`); no separate download is needed.
 
 ### License
 
