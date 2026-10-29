@@ -24,6 +24,7 @@
 
 > **Важно.** Обновление ядер и прямой доступ к первой карте памяти появились в прошивках от 18.10.2026 и позже.
 > Возможность использовать вторую карту памяти (режим MSC 2) появилась в прошивках от 27.10.2026.
+> Автоопределение модели устройства и версии прошивки появилось в прошивках от 29.10.2026.
 > Если вы не уверены, какая прошивка установлена на плате, сначала обновите прошивку — без обновления ядер.
 > И только после успешного обновления прошивки можно обновлять ядра.
 
@@ -139,6 +140,7 @@ Firmware and cores can be updated together or separately — for example, cores 
 
 > **Important.** Updating cores and direct access to the first memory card appeared in firmware dated 18.10.2026 and newer.
 > The ability to use a second memory card (MSC mode 2) was added in firmware dated 27.10.2026.
+> Automatic detection of the device model and firmware version appeared in firmware dated 29.10.2026.
 > If you are not sure which firmware is installed on your board, update the firmware first — without updating cores.
 > Only after the firmware has been updated successfully can you update the cores.
 
