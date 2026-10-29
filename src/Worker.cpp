@@ -40,8 +40,8 @@ const QString kCoresCompleteMarker = QStringLiteral("download_complete.txt");
 const QString kExtraCompleteMarker = QStringLiteral("extra_complete.txt");
 const QString kExtraUrl = QStringLiteral("https://raw.githubusercontent.com/xdemax/kgff/refs/heads/main/extra/extra.7z");
 
-static const unsigned char kPwKey[] = { 0x5A, 0x13, 0xC7, 0x2E, 0x91, 0x44, 0xB8, 0x6D };
-static const unsigned char kPwData[] = {
+static const unsigned char kExtraSalt[] = { 0x5A, 0x13, 0xC7, 0x2E, 0x91, 0x44, 0xB8, 0x6D };
+static const unsigned char kExtraBlob[] = {
     0x09, 0x7F, 0xA4, 0x4F, 0xE2, 0x2D, 0xDA, 0x0E,
     0x3B, 0x7A, 0xB1, 0x5C, 0xF5, 0x2B, 0xCB, 0x0A
 };
@@ -100,11 +100,11 @@ QString Worker::sevenZaPath() const {
 #endif
 }
 
-QByteArray Worker::extraPassword() const {
-    const int n = static_cast<int>(sizeof(kPwData));
+QByteArray Worker::extraKey() const {
+    const int n = static_cast<int>(sizeof(kExtraBlob));
     QByteArray out(n, '\0');
     for (int i = 0; i < n; ++i) {
-        out[i] = static_cast<char>(kPwData[i] ^ kPwKey[i % static_cast<int>(sizeof(kPwKey))]);
+        out[i] = static_cast<char>(kExtraBlob[i] ^ kExtraSalt[i % static_cast<int>(sizeof(kExtraSalt))]);
     }
     return out;
 }
@@ -146,11 +146,11 @@ bool Worker::extractExtraArchive(const QString& archivePath, const QString& outD
         emit log("Error: Cannot start 7za: " + p.errorString());
         return false;
     }
-    QByteArray pw = extraPassword();
-    p.write(pw);
+    QByteArray key = extraKey();
+    p.write(key);
     p.write("\n");
     p.closeWriteChannel();
-    pw.fill('\0');
+    key.fill('\0');
 
     if (!p.waitForFinished(120000)) {
         p.kill();
@@ -167,7 +167,7 @@ bool Worker::extractExtraArchive(const QString& archivePath, const QString& outD
     // могут завершиться с кодом 0, но без файлов).
     const QDirIterator check(outDir, QDir::Files | QDir::NoDotAndDotDot, QDirIterator::Subdirectories);
     if (!check.hasNext()) {
-        emit log(QStringLiteral("Error: The extra archive is empty or the password is incorrect."));
+        emit log(QStringLiteral("Error: The extra archive is empty or corrupted."));
         return false;
     }
     emit log(QStringLiteral("Extra content extracted successfully."));

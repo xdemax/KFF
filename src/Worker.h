@@ -99,7 +99,7 @@ private:
     bool extractExtraArchive(const QString& archivePath, const QString& outDir);
     bool copyExtraToSd(const QString& srcDir, const QString& sdRoot);
     QString sevenZaPath() const;
-    QByteArray extraPassword() const;
+    QByteArray extraKey() const;
 
     std::atomic<bool> m_cancel{false};
     bool m_permissionDenied = false;                    // только рабочий поток
