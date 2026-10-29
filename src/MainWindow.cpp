@@ -18,6 +18,9 @@
 #include <QLineEdit>
 #include <QMessageBox>
 #include <QMetaObject>
+#include <QPainter>
+#include <QPen>
+#include <QPixmap>
 #include <QPlainTextEdit>
 #include <QProcess>
 #include <QPushButton>
@@ -47,9 +50,26 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     m_modelCombo->setMinimumHeight(28);
     m_modelCombo->setMaximumHeight(28);
     for (const ModelInfo& m : models()) m_modelCombo->addItem(m.name);
-    m_detectBtn = new QPushButton(QStringLiteral("\xF0\x9F\x94\x8D"));   // 🔍
+    m_detectBtn = new QPushButton;
     m_detectBtn->setFixedSize(32, 28);
     m_detectBtn->setToolTip(tr("Automatic model detection (AT+KARABAS=version)"));
+    // Иконка лупы рисуется вручную: эмодзи 🔍 есть не во всех шрифтах (на Linux вместо него
+    // появляются «кракозябры»), а QStyle-иконки на разных платформах выглядят по-разному.
+    {
+        QPixmap pm(16, 16);
+        pm.fill(Qt::transparent);
+        QPainter p(&pm);
+        p.setRenderHint(QPainter::Antialiasing, true);
+        QPen pen(palette().color(QPalette::ButtonText));
+        pen.setWidthF(1.8);
+        p.setPen(pen);
+        p.setBrush(Qt::NoBrush);
+        p.drawEllipse(QRectF(2.0, 2.0, 9.0, 9.0));
+        p.drawLine(QPointF(10.0, 10.0), QPointF(14.0, 14.0));
+        p.end();
+        m_detectBtn->setIcon(QIcon(pm));
+        m_detectBtn->setIconSize(QSize(16, 16));
+    }
     m_downloadBtn = new QPushButton(tr("Download via GitHub"));
     row1->addWidget(m_modelCombo, 1);
     row1->addWidget(m_detectBtn, 0);
