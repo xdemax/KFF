@@ -82,6 +82,11 @@ private:
     void doFlash(const Params& p);
     void doOpenSd(const Params& p);
 
+    // Универсальная процедура: открыть порт, отправить AT-команду, дождаться ответа.
+    // Возвращает true, если ответ получен (resp заполнен). Если ответ содержит "ERROR",
+    // возвращает false и заполняет resp текстом ошибки.
+    bool sendAtCommand(const QString& portLocation, const QByteArray& cmd,
+                       QByteArray* resp, int timeoutMs);
     bool sendMscCommand(const QString& portLocation, int mscMode);
     bool queryVersion(const QString& portLocation, QString* raw, int* board);
     bool resetPortToBootloader(const QString& portLocation);

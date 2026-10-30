@@ -697,11 +697,13 @@ bool Worker::isPortPresent(const QString& portLocation) {
     return false;
 }
 
-bool Worker::sendMscCommand(const QString& portLocation, int mscMode) {
-    const QByteArray cmd = (mscMode == 2) ? QByteArray("AT+KARABAS=msc2\r\n")
-                                          : QByteArray("AT+KARABAS=msc\r\n");
-    emit log("Sending " + QString::fromLatin1(cmd).trimmed() + " command to " + portLocation +
-             " (MSC mode " + QString::number(mscMode) + ")...");
+// Универсальная процедура обмена AT-командой по последовательному порту.
+// Открывает порт, пишет команду, читает ответ до появления маркера "+KARABAS:"
+// (для version) или до истечения таймаута (для msc). Никаких манипуляций с DTR/RTS
+// и clear() — на Windows они сбивают USB-CDC устройство (RP2040).
+bool Worker::sendAtCommand(const QString& portLocation, const QByteArray& cmd,
+                           QByteArray* resp, int timeoutMs) {
+    if (resp) resp->clear();
 
     QSerialPort sp;
     sp.setPortName(portLocation);
@@ -730,33 +732,52 @@ bool Worker::sendMscCommand(const QString& portLocation, int mscMode) {
         return false;
     }
 
-#if defined(Q_OS_WIN)
-    // См. queryVersion(): на Windows открытие порта дёргает DTR/RTS.
-    sp.setDataTerminalReady(false);
-    sp.setRequestToSend(false);
-    sp.clear(QSerialPort::AllDirections);
-    QThread::msleep(100);
-#endif
-
     if (sp.write(cmd) != cmd.size() || !sp.waitForBytesWritten(2000)) {
         emit log(QStringLiteral("Error: Failed to write data to the serial port."));
         return false;
     }
-    emit log(QStringLiteral("Command sent successfully. Waiting for device reboot into MSC..."));
 
-    if (sp.waitForReadyRead(1000)) {
-        QByteArray resp = sp.readAll();
-        while (sp.waitForReadyRead(50)) resp += sp.readAll();
-        const QString text = QString::fromUtf8(resp).trimmed();
-        if (!text.isEmpty()) {
-            if (text.contains(QStringLiteral("ERROR"), Qt::CaseInsensitive)) {
-                emit log("Error: The device rejected the MSC command: " + text +
-                         ". Check that the firmware supports this command and the MSC mode number.");
-                return false;
-            }
-            emit log("Device response: " + text);
+    QByteArray buf;
+    QElapsedTimer timer;
+    timer.start();
+    while (timer.elapsed() < timeoutMs) {
+        if (m_cancel.load()) {
+            emit log(QStringLiteral("Operation cancelled by user."));
+            return false;
         }
+        if (sp.waitForReadyRead(100)) buf += sp.readAll();
+        // Ответ на version содержит "+KARABAS:" — как только он появился, дочитываем
+        // остаток строки и выходим. Для msc маркера нет, читаем до таймаута.
+        if (buf.contains("+KARABAS:")) {
+            while (sp.waitForReadyRead(50)) buf += sp.readAll();
+            break;
+        }
+        if (buf.contains("ERROR")) break;
     }
+    if (resp) *resp = buf;
+    return !buf.isEmpty();
+}
+
+bool Worker::sendMscCommand(const QString& portLocation, int mscMode) {
+    const QByteArray cmd = (mscMode == 2) ? QByteArray("AT+KARABAS=msc2\r\n")
+                                          : QByteArray("AT+KARABAS=msc\r\n");
+    emit log("Sending " + QString::fromLatin1(cmd).trimmed() + " command to " + portLocation +
+             " (MSC mode " + QString::number(mscMode) + ")...");
+
+    QByteArray resp;
+    if (!sendAtCommand(portLocation, cmd, &resp, 1000)) {
+        // Пустой ответ — не ошибка: устройство могло уже перезагрузиться в MSC.
+        // Ошибку открытия/записи sendAtCommand уже залогировал.
+        return true;
+    }
+    const QString text = QString::fromUtf8(resp).trimmed();
+    if (text.contains(QStringLiteral("ERROR"), Qt::CaseInsensitive)) {
+        emit log("Error: The device rejected the MSC command: " + text +
+                 ". Check that the firmware supports this command and the MSC mode number.");
+        return false;
+    }
+    if (!text.isEmpty()) emit log("Device response: " + text);
+    emit log(QStringLiteral("Command sent successfully. Waiting for device reboot into MSC..."));
     return true;
 }
 
@@ -765,44 +786,8 @@ bool Worker::queryVersion(const QString& portLocation, QString* raw, int* board)
     emit log("Sending AT+KARABAS=version command to " + portLocation + "...");
     m_permissionDenied = false;
 
-    QSerialPort sp;
-    sp.setPortName(portLocation);
-    sp.setBaudRate(QSerialPort::Baud115200);
-    sp.setDataBits(QSerialPort::Data8);
-    sp.setParity(QSerialPort::NoParity);
-    sp.setStopBits(QSerialPort::OneStop);
-    sp.setFlowControl(QSerialPort::NoFlowControl);
-
-    if (!sp.open(QIODevice::ReadWrite)) {
-        QString msg = "Error: Failed to open " + portLocation + ": " + sp.errorString() + ".";
-#if defined(Q_OS_LINUX)
-        if (sp.error() == QSerialPort::PermissionError) {
-            msg += " No permission to access the port.";
-            m_permissionDenied = true;
-        }
-#endif
-        emit log(msg);
-        if (m_permissionDenied) {
-            emit portAccessDenied(portLocation);
-        }
-        return false;
-    }
-
-#if defined(Q_OS_WIN)
-    // На Windows открытие порта дёргает DTR/RTS, что может сбросить/сбить USB-CDC
-    // устройство (RP2040). Явно опускаем линии и сбрасываем буферы, чтобы начать
-    // с чистого состояния. На Linux/macOS эти манипуляции, наоборот, могут
-    // сбросить устройство через USB-CDC, поэтому там их не делаем.
-    sp.setDataTerminalReady(false);
-    sp.setRequestToSend(false);
-    sp.clear(QSerialPort::AllDirections);
-    QThread::msleep(100);       // даём устройству время на инициализацию после открытия
-#endif
-
     const QByteArray cmd("AT+KARABAS=version\r\n");
     QByteArray resp;
-    QElapsedTimer timer;
-    timer.start();
     // До двух попыток: первая может потеряться, если устройство ещё не готово
     // сразу после открытия порта (типично для Windows).
     for (int attempt = 0; attempt < 2 && !resp.contains("+KARABAS:"); ++attempt) {
@@ -810,23 +795,10 @@ bool Worker::queryVersion(const QString& portLocation, QString* raw, int* board)
             emit log(QStringLiteral("No response yet, retrying version request..."));
             QThread::msleep(300);
         }
-        if (sp.write(cmd) != cmd.size() || !sp.waitForBytesWritten(2000)) {
-            emit log(QStringLiteral("Error: Failed to write data to the serial port."));
-            return false;
-        }
-        // Ждём ответ до 3 секунд, накапливая данные
-        const qint64 deadline = timer.elapsed() + 3000;
-        while (timer.elapsed() < deadline) {
-            if (m_cancel.load()) {
-                emit log(QStringLiteral("Operation cancelled by user."));
-                return false;
-            }
-            if (sp.waitForReadyRead(200)) resp += sp.readAll();
-            if (resp.contains("+KARABAS:")) {
-                // дочитываем остаток строки
-                while (sp.waitForReadyRead(100)) resp += sp.readAll();
-                break;
-            }
+        if (!sendAtCommand(portLocation, cmd, &resp, 3000)) {
+            // sendAtCommand уже залогировал ошибку открытия/записи/отмены.
+            // Пустой ответ — повод для повтора, поэтому не выходим сразу.
+            if (m_cancel.load()) return false;
         }
     }
 
