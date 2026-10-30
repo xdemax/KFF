@@ -776,7 +776,9 @@ bool Worker::sendMscCommand(const QString& portLocation, int mscMode) {
                  ". Check that the firmware supports this command and the MSC mode number.");
         return false;
     }
-    if (!text.isEmpty()) emit log("Device response: " + text);
+    if (!text.isEmpty()) {
+        emit log("Device response: " + text);
+    }
     emit log(QStringLiteral("Command sent successfully. Waiting for device reboot into MSC..."));
     return true;
 }
