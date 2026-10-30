@@ -780,7 +780,9 @@ bool Worker::queryVersion(const QString& portLocation, QString* raw, int* board)
         }
 #endif
         emit log(msg);
-        if (m_permissionDenied) emit portAccessDenied(portLocation);
+        if (m_permissionDenied) {
+            emit portAccessDenied(portLocation);
+        }
         return false;
     }
 
