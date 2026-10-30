@@ -1249,11 +1249,10 @@ void Worker::doFlash(const Params& p) {
         }
     }
 
+#if !defined(Q_OS_MACOS)
     // Если диск RPI-RP2 всё ещё смонтирован (плата не перезагрузилась сама), извлекаем его.
-    // Обычно RP2040 отключается сразу после записи последнего блока, и диск исчезает сам -
-    // тогда eject не нужен (на macOS попытка eject уже исчезнувшего диска вызывает
-    // системное уведомление "disk not ejected properly"). Поэтому сначала проверяем,
-    // что диск ещё виден.
+    // На macOS этого делать нельзя: RP2040 отключается сам сразу после записи, и diskutil eject
+    // на уже исчезнувшем диске вызывает системное уведомление "disk not ejected properly".
     const QList<Platform::Candidate> still = Platform::bootloaderDisks();
     for (const Platform::Candidate& c : still) {
         QString detail;
@@ -1263,4 +1262,5 @@ void Worker::doFlash(const Params& p) {
             emit log("Warning: Could not eject the bootloader drive: " + detail);
         }
     }
+#endif
 }
