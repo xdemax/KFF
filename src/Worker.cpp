@@ -730,11 +730,13 @@ bool Worker::sendMscCommand(const QString& portLocation, int mscMode) {
         return false;
     }
 
+#if defined(Q_OS_WIN)
     // См. queryVersion(): на Windows открытие порта дёргает DTR/RTS.
     sp.setDataTerminalReady(false);
     sp.setRequestToSend(false);
     sp.clear(QSerialPort::AllDirections);
     QThread::msleep(100);
+#endif
 
     if (sp.write(cmd) != cmd.size() || !sp.waitForBytesWritten(2000)) {
         emit log(QStringLiteral("Error: Failed to write data to the serial port."));
@@ -786,13 +788,16 @@ bool Worker::queryVersion(const QString& portLocation, QString* raw, int* board)
         return false;
     }
 
+#if defined(Q_OS_WIN)
     // На Windows открытие порта дёргает DTR/RTS, что может сбросить/сбить USB-CDC
     // устройство (RP2040). Явно опускаем линии и сбрасываем буферы, чтобы начать
-    // с чистого состояния. На Linux/macOS это безвредно.
+    // с чистого состояния. На Linux/macOS эти манипуляции, наоборот, могут
+    // сбросить устройство через USB-CDC, поэтому там их не делаем.
     sp.setDataTerminalReady(false);
     sp.setRequestToSend(false);
     sp.clear(QSerialPort::AllDirections);
     QThread::msleep(100);       // даём устройству время на инициализацию после открытия
+#endif
 
     const QByteArray cmd("AT+KARABAS=version\r\n");
     QByteArray resp;
@@ -864,7 +869,6 @@ bool Worker::resetPortToBootloader(const QString& portLocation) {
 #endif
         return false;
     }
-    sp.setRequestToSend(false);
     sp.setDataTerminalReady(true);
     QThread::msleep(50);
     sp.setDataTerminalReady(false);
