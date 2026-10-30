@@ -732,6 +732,14 @@ bool Worker::sendAtCommand(const QString& portLocation, const QByteArray& cmd,
         return false;
     }
 
+#if defined(Q_OS_WIN)
+    // На Windows USB-CDC устройство (RP2040) после открытия порта ещё "поднимается":
+    // первые байты, отправленные сразу, теряются. Даём время и сбрасываем входной
+    // буфер, в котором могут остаться байты от предыдущего открытия порта.
+    QThread::msleep(250);
+    sp.clear(QSerialPort::Input);
+#endif
+
     if (sp.write(cmd) != cmd.size() || !sp.waitForBytesWritten(2000)) {
         emit log(QStringLiteral("Error: Failed to write data to the serial port."));
         return false;
@@ -790,14 +798,15 @@ bool Worker::queryVersion(const QString& portLocation, QString* raw, int* board)
 
     const QByteArray cmd("AT+KARABAS=version\r\n");
     QByteArray resp;
-    // До двух попыток: первая может потеряться, если устройство ещё не готово
-    // сразу после открытия порта (типично для Windows).
-    for (int attempt = 0; attempt < 2 && !resp.contains("+KARABAS:"); ++attempt) {
+    // До трёх попыток: первая может потеряться, если устройство ещё не готово
+    // сразу после открытия порта (типично для Windows). Между попытками - пауза,
+    // чтобы устройство успело "подняться" после открытия порта.
+    for (int attempt = 0; attempt < 3 && !resp.contains("+KARABAS:"); ++attempt) {
         if (attempt > 0) {
             emit log(QStringLiteral("No response yet, retrying version request..."));
-            QThread::msleep(300);
+            QThread::msleep(500);
         }
-        if (!sendAtCommand(portLocation, cmd, &resp, 3000)) {
+        if (!sendAtCommand(portLocation, cmd, &resp, 4000)) {
             // sendAtCommand уже залогировал ошибку открытия/записи/отмены.
             // Пустой ответ — повод для повтора, поэтому не выходим сразу.
             if (m_cancel.load()) return false;
