@@ -730,6 +730,12 @@ bool Worker::sendMscCommand(const QString& portLocation, int mscMode) {
         return false;
     }
 
+    // См. queryVersion(): на Windows открытие порта дёргает DTR/RTS.
+    sp.setDataTerminalReady(false);
+    sp.setRequestToSend(false);
+    sp.clear(QSerialPort::AllDirections);
+    QThread::msleep(100);
+
     if (sp.write(cmd) != cmd.size() || !sp.waitForBytesWritten(2000)) {
         emit log(QStringLiteral("Error: Failed to write data to the serial port."));
         return false;
@@ -778,26 +784,42 @@ bool Worker::queryVersion(const QString& portLocation, QString* raw, int* board)
         return false;
     }
 
-    const QByteArray cmd("AT+KARABAS=version\r\n");
-    if (sp.write(cmd) != cmd.size() || !sp.waitForBytesWritten(2000)) {
-        emit log(QStringLiteral("Error: Failed to write data to the serial port."));
-        return false;
-    }
+    // На Windows открытие порта дёргает DTR/RTS, что может сбросить/сбить USB-CDC
+    // устройство (RP2040). Явно опускаем линии и сбрасываем буферы, чтобы начать
+    // с чистого состояния. На Linux/macOS это безвредно.
+    sp.setDataTerminalReady(false);
+    sp.setRequestToSend(false);
+    sp.clear(QSerialPort::AllDirections);
+    QThread::msleep(100);       // даём устройству время на инициализацию после открытия
 
-    // Ждём ответ до 2 секунд, накапливая данные
+    const QByteArray cmd("AT+KARABAS=version\r\n");
     QByteArray resp;
     QElapsedTimer timer;
     timer.start();
-    while (timer.elapsed() < 2000) {
-        if (m_cancel.load()) {
-            emit log(QStringLiteral("Operation cancelled by user."));
+    // До двух попыток: первая может потеряться, если устройство ещё не готово
+    // сразу после открытия порта (типично для Windows).
+    for (int attempt = 0; attempt < 2 && !resp.contains("+KARABAS:"); ++attempt) {
+        if (attempt > 0) {
+            emit log(QStringLiteral("No response yet, retrying version request..."));
+            QThread::msleep(300);
+        }
+        if (sp.write(cmd) != cmd.size() || !sp.waitForBytesWritten(2000)) {
+            emit log(QStringLiteral("Error: Failed to write data to the serial port."));
             return false;
         }
-        if (sp.waitForReadyRead(200)) resp += sp.readAll();
-        if (resp.contains("+KARABAS:")) {
-            // дочитываем остаток строки
-            while (sp.waitForReadyRead(100)) resp += sp.readAll();
-            break;
+        // Ждём ответ до 3 секунд, накапливая данные
+        const qint64 deadline = timer.elapsed() + 3000;
+        while (timer.elapsed() < deadline) {
+            if (m_cancel.load()) {
+                emit log(QStringLiteral("Operation cancelled by user."));
+                return false;
+            }
+            if (sp.waitForReadyRead(200)) resp += sp.readAll();
+            if (resp.contains("+KARABAS:")) {
+                // дочитываем остаток строки
+                while (sp.waitForReadyRead(100)) resp += sp.readAll();
+                break;
+            }
         }
     }
 
@@ -840,6 +862,7 @@ bool Worker::resetPortToBootloader(const QString& portLocation) {
 #endif
         return false;
     }
+    sp.setRequestToSend(false);
     sp.setDataTerminalReady(true);
     QThread::msleep(50);
     sp.setDataTerminalReady(false);
