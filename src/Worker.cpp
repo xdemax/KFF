@@ -235,6 +235,20 @@ void Worker::runDetectModel(const Params& p) {
 
 // Кнопка «Open SD card in explorer»: режим MSC, ожидание диска, открытие папки карты.
 void Worker::doOpenSd(const Params& p) {
+    // Если смонтирован диск с меткой Карабаса - устройство уже в MSC-режиме.
+    QStringList where;
+    for (const Platform::Candidate& c : Platform::newDisks(Platform::readyRemovableDisks())) {
+        if (!isKarabasVolumeLabel(c.label)) continue;
+        where << (c.mountPoint.isEmpty() ? c.node : c.mountPoint) +
+                     (c.label.isEmpty() ? QString() : " [" + c.label + "]");
+    }
+    if (!where.isEmpty()) {
+        emit log(QStringLiteral("Warning: The device is already in MSC mode (drive %1 is mounted). "
+                                "To leave it, safely eject the SD card drive from your system "
+                                "(or unplug the USB cable).").arg(where.join(", ")));
+        return;
+    }
+
     if (p.portLocation.isEmpty()) {
         emit log(QStringLiteral("Warning: No serial port selected. The device may already be in MSC mode "
                                 "(the serial port disappears in this mode). To leave it, safely eject the "

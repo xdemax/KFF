@@ -353,6 +353,24 @@ void MainWindow::onFlash() {
 void MainWindow::onMsc() {
     if (m_busy) return;
     const Params p = collectParams();
+
+    // Если смонтирован диск с меткой Карабаса - устройство уже в MSC-режиме.
+    // Повторная команда MSC бессмысленна (и на Windows порт может ещё висеть
+    // в списке, поэтому проверки "порт пуст" недостаточно). Метка тома отличает
+    // Карабас от случайно вставленной флешки.
+    QStringList where;
+    for (const Platform::Candidate& c : Platform::newDisks(Platform::readyRemovableDisks())) {
+        if (!isKarabasVolumeLabel(c.label)) continue;
+        where << (c.mountPoint.isEmpty() ? c.node : c.mountPoint) +
+                     (c.label.isEmpty() ? QString() : " [" + c.label + "]");
+    }
+    if (!where.isEmpty()) {
+        appendLog(QStringLiteral("Warning: The device is already in MSC mode (drive %1 is mounted). "
+                                 "To leave it, safely eject the SD card drive from your system "
+                                 "(or unplug the USB cable).").arg(where.join(", ")));
+        return;
+    }
+
     if (p.portLocation.isEmpty()) {
         // Порта нет: скорее всего, устройство уже в MSC-режиме (или не подключено).
         // Команду MSC посылать некуда - подсказываем, как выйти из режима.
