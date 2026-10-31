@@ -22,3 +22,7 @@ bool openInFileManager(const QString& path);
 
 // Копирование с fsync: данные гарантированно записаны на носитель.
 bool copyFileSynced(const QString& src, const QString& dst, QString* err);
+
+// Метка тома, которую отдаёт Карабас в MSC-режиме (карта 1 - "CORES", карта 2 - "EXTRA").
+// Используется, чтобы отличить Карабас от случайно вставленной флешки.
+bool isKarabasVolumeLabel(const QString& label);

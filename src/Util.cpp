@@ -73,6 +73,11 @@ static void setErr(QString* e, const QString& m) {
     if (e) *e = m;
 }
 
+bool isKarabasVolumeLabel(const QString& label) {
+    return label.compare(QStringLiteral("CORES"), Qt::CaseInsensitive) == 0 ||
+           label.compare(QStringLiteral("EXTRA"), Qt::CaseInsensitive) == 0;
+}
+
 bool copyFileSynced(const QString& src, const QString& dst, QString* err) {
     QFile in(src);
     if (!in.open(QIODevice::ReadOnly)) {

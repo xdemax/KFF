@@ -202,6 +202,7 @@ MainWindow::MainWindow(bool fileLogging, QWidget* parent) : QWidget(parent), m_f
     connect(m_mscBtn, &QPushButton::clicked, this, &MainWindow::onMsc);
     connect(m_detectBtn, &QPushButton::clicked, this, &MainWindow::onDetectModel);
     connect(m_worker, &Worker::modelDetected, this, &MainWindow::onModelDetected);
+    connect(m_worker, &Worker::portsChanged, this, &MainWindow::onRefreshPorts);
     connect(m_comCombo, &QComboBox::currentIndexChanged, this, [this](int) { updateActionState(); });
     connect(m_modelCombo, &QComboBox::currentIndexChanged, this, [this](int idx) {
         // Прошивка привязана к модели: при смене модели сбрасываем путь, чтобы

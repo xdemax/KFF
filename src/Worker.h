@@ -47,6 +47,7 @@ signals:
     void portAccessDenied(const QString& portLocation); // нет прав на порт (Linux)
     void openFolder(const QString& path);               // открыть папку в файловом менеджере
     void modelDetected(int modelIndex, const QString& raw); // ответ на AT+KARABAS=version
+    void portsChanged();                                // список портов мог измениться (MSC, сброс)
 
 private:
     struct HttpResult {

@@ -262,6 +262,7 @@ void Worker::doOpenSd(const Params& p) {
              ". Opening it in the file manager...");
     emit openFolder(sd.mountPoint);
     emit log(QStringLiteral("To leave this mode, safely eject the memory card from your system."));
+    emit portsChanged();        // порт исчез - обновим список в GUI
 }
 
 // ----------------------------------------------------------------------------
