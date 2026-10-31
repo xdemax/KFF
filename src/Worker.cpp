@@ -762,6 +762,15 @@ bool Worker::sendAtCommand(const QString& portLocation, const QByteArray& cmd,
         }
         if (buf.contains("ERROR")) break;
     }
+    // Диагностика: сколько байт реально пришло и что именно (для отладки проблем
+    // с USB-CDC на Windows). Если buf пуст - устройство не ответило вообще.
+    if (buf.isEmpty()) {
+        emit log(QStringLiteral("Diagnostics: no bytes received from the device (port open, command written)."));
+    } else {
+        emit log(QStringLiteral("Diagnostics: received %1 bytes: %2")
+                    .arg(buf.size())
+                    .arg(QString::fromUtf8(buf.left(200)).trimmed()));
+    }
     if (resp) *resp = buf;
     return !buf.isEmpty();
 }
