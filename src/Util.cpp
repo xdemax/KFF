@@ -73,9 +73,28 @@ static void setErr(QString* e, const QString& m) {
     if (e) *e = m;
 }
 
-bool isKarabasVolumeLabel(const QString& label) {
-    return label.compare(QStringLiteral("CORES"), Qt::CaseInsensitive) == 0 ||
-           label.compare(QStringLiteral("EXTRA"), Qt::CaseInsensitive) == 0;
+bool isKarabasVolume(const QString& mountPoint) {
+    if (mountPoint.isEmpty()) return false;
+    const QDir dir(mountPoint);
+    if (!dir.exists()) return false;
+
+    // Ядра в корне карты: .kg1 / .kg2 / .kg3
+    const QFileInfoList files = dir.entryInfoList(QDir::Files | QDir::NoSymLinks, QDir::Name);
+    for (const QFileInfo& fi : files) {
+        const QString n = fi.fileName();
+        if (n.startsWith(QLatin1String("._"))) continue;      // служебные файлы macOS
+        if (n.endsWith(QLatin1String(".kg1"), Qt::CaseInsensitive) ||
+            n.endsWith(QLatin1String(".kg2"), Qt::CaseInsensitive) ||
+            n.endsWith(QLatin1String(".kg3"), Qt::CaseInsensitive)) {
+            return true;
+        }
+    }
+    // Папка резервной копии, которую создаёт программа при обновлении ядер.
+    const QFileInfoList dirs = dir.entryInfoList(QDir::Dirs | QDir::NoSymLinks, QDir::Name);
+    for (const QFileInfo& fi : dirs) {
+        if (fi.fileName().startsWith(QLatin1String("backup_"))) return true;
+    }
+    return false;
 }
 
 bool copyFileSynced(const QString& src, const QString& dst, QString* err) {

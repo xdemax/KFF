@@ -360,7 +360,7 @@ void MainWindow::onMsc() {
     // Карабас от случайно вставленной флешки.
     QStringList where;
     for (const Platform::Candidate& c : Platform::newDisks(Platform::readyRemovableDisks())) {
-        if (!isKarabasVolumeLabel(c.label)) continue;
+        if (!isKarabasVolume(c.mountPoint)) continue;
         where << (c.mountPoint.isEmpty() ? c.node : c.mountPoint) +
                      (c.label.isEmpty() ? QString() : " [" + c.label + "]");
     }
