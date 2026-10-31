@@ -736,12 +736,13 @@ bool Worker::sendAtCommand(const QString& portLocation, const QByteArray& cmd,
 
 #if defined(Q_OS_WIN)
     // На Windows USB-CDC устройство (RP2040) после открытия порта ещё "поднимается":
-    // первые байты, отправленные сразу, теряются. Даём время. DTR/RTS опускаем,
-    // чтобы не сбить устройство (на Linux это не нужно и может навредить).
-    // clear() не вызываем: он может стереть ответ, если устройство уже начало отвечать.
-    sp.setDataTerminalReady(false);
-    sp.setRequestToSend(false);
-    QThread::msleep(250);
+    // первые байты, отправленные сразу, теряются. Даём время. DTR/RTS не трогаем:
+    // на некоторых USB-CDC мостах опускание линий сбивает устройство, а поднятие -
+    // блокирует передачу. Пусть драйвер сам управляет линиями.
+    QThread::msleep(500);
+    emit log(QStringLiteral("Diagnostics: port opened, DTR=%1 RTS=%2, waiting 500 ms before write.")
+                .arg(sp.isDataTerminalReady() ? QStringLiteral("on") : QStringLiteral("off"))
+                .arg(sp.isRequestToSend() ? QStringLiteral("on") : QStringLiteral("off")));
 #endif
 
     if (sp.write(cmd) != cmd.size() || !sp.waitForBytesWritten(2000)) {
