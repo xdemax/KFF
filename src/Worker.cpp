@@ -236,7 +236,9 @@ void Worker::runDetectModel(const Params& p) {
 // Кнопка «Open SD card in explorer»: режим MSC, ожидание диска, открытие папки карты.
 void Worker::doOpenSd(const Params& p) {
     if (p.portLocation.isEmpty()) {
-        emit log(QStringLiteral("Error: Please select an active serial port first."));
+        emit log(QStringLiteral("Warning: No serial port selected. The device may already be in MSC mode "
+                                "(the serial port disappears in this mode). To leave it, safely eject the "
+                                "SD card drive from your system (or unplug the USB cable)."));
         return;
     }
 

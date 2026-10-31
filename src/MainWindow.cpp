@@ -324,8 +324,9 @@ void MainWindow::updateActionState() {
     }
     m_flashBtn->setEnabled(canFlash);
 
-    // MSC: нужен реальный порт
-    m_mscBtn->setEnabled(!m_comCombo->currentData().toString().isEmpty());
+    // MSC: кнопка активна всегда. Если порт не выбран/отсутствует, при нажатии
+    // покажем подсказку про безопасное извлечение (устройство может быть уже в MSC).
+    m_mscBtn->setEnabled(true);
 }
 
 // ----------------------------------------------------------------------------
@@ -350,8 +351,16 @@ void MainWindow::onFlash() {
 
 void MainWindow::onMsc() {
     if (m_busy) return;
-    setBusy(true);
     const Params p = collectParams();
+    if (p.portLocation.isEmpty()) {
+        // Порта нет: скорее всего, устройство уже в MSC-режиме (или не подключено).
+        // Команду MSC посылать некуда - подсказываем, как выйти из режима.
+        appendLog(QStringLiteral("Warning: No serial port selected. The device may already be in MSC mode "
+                                 "(the serial port disappears in this mode). To leave it, safely eject the "
+                                 "SD card drive from your system (or unplug the USB cable)."));
+        return;
+    }
+    setBusy(true);
     m_worker->clearCancel();        // сброс в GUI-потоке до постановки задачи в очередь
     QMetaObject::invokeMethod(m_worker, [w = m_worker, p]() { w->runMsc(p); }, Qt::QueuedConnection);
 }
