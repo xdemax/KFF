@@ -692,7 +692,9 @@ void Worker::doDownload(const Params& p) {
 bool Worker::isPortPresent(const QString& portLocation) {
     const QList<QSerialPortInfo> ports = QSerialPortInfo::availablePorts();
     for (const QSerialPortInfo& i : ports) {
-        if (i.systemLocation() == portLocation) return true;
+        // На Windows systemLocation() возвращает "COM3", но на некоторых версиях Qt
+        // может вернуть "\\.\COM3" - сравниваем оба варианта.
+        if (i.systemLocation() == portLocation || i.portName() == portLocation) return true;
     }
     return false;
 }
@@ -734,10 +736,12 @@ bool Worker::sendAtCommand(const QString& portLocation, const QByteArray& cmd,
 
 #if defined(Q_OS_WIN)
     // На Windows USB-CDC устройство (RP2040) после открытия порта ещё "поднимается":
-    // первые байты, отправленные сразу, теряются. Даём время и сбрасываем входной
-    // буфер, в котором могут остаться байты от предыдущего открытия порта.
+    // первые байты, отправленные сразу, теряются. Даём время. DTR/RTS опускаем,
+    // чтобы не сбить устройство (на Linux это не нужно и может навредить).
+    // clear() не вызываем: он может стереть ответ, если устройство уже начало отвечать.
+    sp.setDataTerminalReady(false);
+    sp.setRequestToSend(false);
     QThread::msleep(250);
-    sp.clear(QSerialPort::Input);
 #endif
 
     if (sp.write(cmd) != cmd.size() || !sp.waitForBytesWritten(2000)) {

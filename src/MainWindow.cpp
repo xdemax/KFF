@@ -406,8 +406,12 @@ void MainWindow::onRefreshPorts() {
         if (!info.hasVendorIdentifier()) continue;
 #if defined(Q_OS_WIN)
         QString text = info.portName();                  // COM3
+        // Qt6 на Windows ожидает "COM3", а не "\\.\COM3": с префиксом порт
+        // открывается, но waitForReadyRead() не видит входящих данных.
+        const QString location = info.portName();
 #else
         QString text = info.systemLocation();
+        const QString location = info.systemLocation();
 #endif
         if (!info.description().isEmpty()) text += " (" + info.description() + ")";
         if (info.hasVendorIdentifier() && info.hasProductIdentifier()) {
@@ -415,7 +419,7 @@ void MainWindow::onRefreshPorts() {
                         .arg(info.vendorIdentifier(), 4, 16, QLatin1Char('0'))
                         .arg(info.productIdentifier(), 4, 16, QLatin1Char('0'));
         }
-        m_comCombo->addItem(text, info.systemLocation());
+        m_comCombo->addItem(text, location);
         appendLog("Found port: " + text);
         ++added;
     }
