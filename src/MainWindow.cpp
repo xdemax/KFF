@@ -356,10 +356,10 @@ void MainWindow::onMsc() {
 
     // Если смонтирован диск с меткой Карабаса - устройство уже в MSC-режиме.
     // Повторная команда MSC бессмысленна (и на Windows порт может ещё висеть
-    // в списке, поэтому проверки "порт пуст" недостаточно). Метка тома отличает
-    // Карабас от случайно вставленной флешки.
+    // в списке, поэтому проверки "порт пуст" недостаточно). Проверяем ВСЕ
+    // смонтированные USB-диски, а не только новые: диск Карабаса уже был в снимке.
     QStringList where;
-    for (const Platform::Candidate& c : Platform::newDisks(Platform::readyRemovableDisks())) {
+    for (const Platform::Candidate& c : Platform::newDisks(QSet<QString>())) {
         if (!isKarabasVolume(c.mountPoint)) continue;
         where << (c.mountPoint.isEmpty() ? c.node : c.mountPoint) +
                      (c.label.isEmpty() ? QString() : " [" + c.label + "]");

@@ -236,8 +236,10 @@ void Worker::runDetectModel(const Params& p) {
 // Кнопка «Open SD card in explorer»: режим MSC, ожидание диска, открытие папки карты.
 void Worker::doOpenSd(const Params& p) {
     // Если смонтирован диск с меткой Карабаса - устройство уже в MSC-режиме.
+    // Проверяем ВСЕ смонтированные USB-диски, а не только новые: диск Карабаса
+    // уже был в снимке на момент повторного нажатия.
     QStringList where;
-    for (const Platform::Candidate& c : Platform::newDisks(Platform::readyRemovableDisks())) {
+    for (const Platform::Candidate& c : Platform::newDisks(QSet<QString>())) {
         if (!isKarabasVolume(c.mountPoint)) continue;
         where << (c.mountPoint.isEmpty() ? c.node : c.mountPoint) +
                      (c.label.isEmpty() ? QString() : " [" + c.label + "]");
