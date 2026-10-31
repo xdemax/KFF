@@ -734,16 +734,15 @@ bool Worker::sendAtCommand(const QString& portLocation, const QByteArray& cmd,
         return false;
     }
 
-#if defined(Q_OS_WIN)
-    // На Windows USB-CDC устройство (RP2040) после открытия порта ещё "поднимается":
-    // первые байты, отправленные сразу, теряются. Даём время. DTR/RTS не трогаем:
-    // на некоторых USB-CDC мостах опускание линий сбивает устройство, а поднятие -
-    // блокирует передачу. Пусть драйвер сам управляет линиями.
-    QThread::msleep(500);
-    emit log(QStringLiteral("Diagnostics: port opened, DTR=%1 RTS=%2, waiting 500 ms before write.")
+    // RP2040 (TinyUSB CDC) передаёт данные только при поднятом DTR - как терминал.
+    // На Linux/macOS драйвер обычно поднимает линии сам, но явное выставление
+    // безвредно и делает поведение одинаковым на всех платформах.
+    sp.setDataTerminalReady(true);
+    sp.setRequestToSend(true);
+    QThread::msleep(300);       // дать прошивке заметить подключение
+    emit log(QStringLiteral("Diagnostics: port opened, DTR=%1 RTS=%2.")
                 .arg(sp.isDataTerminalReady() ? QStringLiteral("on") : QStringLiteral("off"))
                 .arg(sp.isRequestToSend() ? QStringLiteral("on") : QStringLiteral("off")));
-#endif
 
     if (sp.write(cmd) != cmd.size() || !sp.waitForBytesWritten(2000)) {
         emit log(QStringLiteral("Error: Failed to write data to the serial port."));
@@ -758,11 +757,16 @@ bool Worker::sendAtCommand(const QString& portLocation, const QByteArray& cmd,
             emit log(QStringLiteral("Operation cancelled by user."));
             return false;
         }
-        if (sp.waitForReadyRead(100)) buf += sp.readAll();
+        // waitForReadyRead() может вернуть false, хотя данные уже в буфере
+        // (особенно на Windows), поэтому проверяем bytesAvailable() отдельно.
+        sp.waitForReadyRead(100);
+        if (sp.bytesAvailable() > 0) buf += sp.readAll();
         // Ответ на version содержит "+KARABAS:" — как только он появился, дочитываем
         // остаток строки и выходим. Для msc маркера нет, читаем до таймаута.
         if (buf.contains("+KARABAS:")) {
-            while (sp.waitForReadyRead(50)) buf += sp.readAll();
+            do {
+                buf += sp.readAll();
+            } while (sp.waitForReadyRead(50));
             break;
         }
         if (buf.contains("ERROR")) break;
